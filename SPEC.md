@@ -79,6 +79,12 @@ Distance is the core skill in this game, so depth has to stay readable.
 - **Sound:** synthesized with Web Audio (no files), following System 1 Arcade's approach: your turn, launches, end turn, reinforcements, battle exchanges, captures, holds, losses, eliminations, win and game over. A header toggle turns it off.
 - The measure-distance tool matters more in 3D. Show turns for any pair of planets.
 
+## Factions and names
+
+Every seat plays one of 18 original factions (`web/src/lib/factions.json`), each with its own naming style: the stately Veyrin Concord, the martial Khar-Dovak Ascendancy, the alphanumeric Lattice, the trickster Fennick Mummers, and others. Computers go by their faction; humans keep their own name, with their faction shown in the lobby.
+
+A planet is called by its holder's name for it, so it's renamed when captured and gets its old name back if retaken. Unclaimed worlds have catalogue names ("Survey 118", "Halden's Find"). The server's letters (A, B, C) stay as keyboard shortcuts. Factions and names are derived in the client from the room code, seat and planet number, so every player in a room sees the same names and the protocol is unchanged.
+
 ## Turn model
 
 Players take turns one at a time in seat order, like the original. Each player is on their own device, and WebSockets tell everyone whose turn it is.

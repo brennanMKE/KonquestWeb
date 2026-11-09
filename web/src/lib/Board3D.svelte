@@ -84,12 +84,19 @@
 
   // A label is anchored at a point and drawn in screen space, just right of
   // it, so it stays upright and beside its planet however the map is turned.
-  function label(text: string, cls: string): CSS2DObject {
+  function label(text: string, cls: string, count?: number): CSS2DObject {
     const anchor = document.createElement("div");
     anchor.className = "anchor";
     const el = document.createElement("span");
     el.className = cls;
     el.textContent = text;
+    // The ship count stands apart, since some planet names end in numbers.
+    if (count !== undefined) {
+      const n = document.createElement("span");
+      n.className = "count";
+      n.textContent = String(count);
+      el.append(" · ", n);
+    }
     anchor.appendChild(el);
     return new CSS2DObject(anchor);
   }
@@ -189,7 +196,7 @@
 
       // Labels are screen-space, so they stay upright and readable however
       // the cube is turned.
-      const tag = label(p.ships !== undefined ? `${p.name} ${p.ships}` : p.name, p.owner === seat ? "tag mine" : "tag");
+      const tag = label(p.name, p.owner === seat ? "tag mine" : "tag", p.ships);
       tag.position.copy(at);
       dynamic.add(tag);
     }
@@ -783,6 +790,10 @@
     color: var(--text);
     text-shadow: 0 0 3px var(--bg), 0 0 3px var(--bg);
     white-space: nowrap;
+  }
+  .board3d :global(.tag .count) {
+    font-weight: 400;
+    color: var(--muted);
   }
   .board3d :global(.tag.mine) {
     color: var(--accent);

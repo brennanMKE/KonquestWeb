@@ -1,0 +1,311 @@
+{
+  "factions": [
+    {
+      "id": "veyrin",
+      "name": "The Veyrin Concord",
+      "short": "Concord",
+      "adjective": "Veyrin",
+      "style": "Soft Latinate names of two to four syllables ending in -a, -is, -ium or -ara, evoking civic virtues, founding assemblies and charters.",
+      "planets": [
+        "Veyrin", "Solvantis", "Meridia", "Lumenara", "Tessaline", "Veladris",
+        "Orisanne", "Palatria", "Serenith", "Caldoris", "Amarellis", "Vireldis",
+        "Quorandis", "Lysanthe", "Marovell", "Elandris", "Juventia", "Ostravel",
+        "Perinthia", "Cassaline", "Novarre", "Idrellis", "Fidelara", "Tranquis",
+        "Benevara", "Clarendis", "Prudentis", "Aequoria", "Concordium", "Senatra",
+        "Libravel", "Comitia", "Candrellis", "Avenora", "Pacivara", "Dignatis",
+        "Oriselle", "Temperis", "Valmoria", "Ravennis", "Ilustra", "Sodalis"
+      ]
+    },
+    {
+      "id": "dovak",
+      "name": "The Khar-Dovak Ascendancy",
+      "short": "Dovak",
+      "adjective": "Dovaki",
+      "style": "Hard, guttural clan names heavy on k, r, g and doubled consonants, often hyphenated or paired with a conquest epithet such as Fall, Hold, Sever or Oath.",
+      "planets": [
+        "Khar-Dovak", "Vrak Hold", "Gorr's Fall", "Brakkun", "Tharvok", "Dul-Marrak",
+        "Okkurz", "Vrennhold", "Skarrok", "Ghazzun", "Thrakkan Reach", "Moruk's Oath",
+        "Durn Kaddak", "Brogga", "Hrakk Sever", "Zhul-Karrag", "Kraddoth", "Urgash Fall",
+        "Drakmor Hold", "Vokk Tarn", "Grulhakk", "Red Dovak", "Bruzhak", "Karrgoth",
+        "Thurm Oath", "Gorvak's Spite", "Hakkar Hold", "Ragg Dunn", "Ozhak", "Vurdruk",
+        "Kell-Tarrag", "Ghorrak Fall", "Dromm Hold", "Thazzuk", "Mogrund", "Brakk's Oath",
+        "Urr Kavak", "Zarrgun", "Drukkoth", "Hrozhak", "Gurrak Sever", "Kazz Dovak"
+      ]
+    },
+    {
+      "id": "ilveth",
+      "name": "The Silent Houses of Ilveth",
+      "short": "Ilveth",
+      "adjective": "Ilvethi",
+      "style": "Hushed, sibilant names rich in s, l, v and y, often a House name or a veiled epithet of secrecy such as Veil, Hush or Mask.",
+      "planets": [
+        "Ilveth", "Sselira", "Vaelmoor", "Lissander", "Thessevane", "Ysolde's Veil",
+        "Morvessa", "Elsivane", "Saffrine", "Nyssandre", "House Vael", "House Syrrin",
+        "Velisse", "Ashveil", "Lysmere", "Sylvanthe", "Isolvere", "Hushmere",
+        "Sevrelle", "Maskvale", "Ysmarre", "Lavessine", "Sillouve", "Vesselyn",
+        "Dusk Syrrin", "Essaveil", "Lyvasse", "Thessavale", "Silvren Mask", "Vyssaline",
+        "Ossielle", "Ilvanesse", "Wyssever", "Sylmarrow", "Quiet Vaenne", "Seliss",
+        "Vairelune", "Lassavere", "Ysevre", "Mossveil", "Hollow Sylle", "Nessavine"
+      ]
+    },
+    {
+      "id": "thrum",
+      "name": "The Thrum",
+      "short": "The Thrum",
+      "adjective": "Thrum",
+      "style": "Humming nasal syllables (mm, nn, ng, kh) doubled or clipped, or plain chamber designations such as Comb, Cell, Brood or Warren followed by a number word.",
+      "planets": [
+        "Mmur", "Nnuth", "Comb Nine", "Brood Keth", "Vmm-Taal", "Chamber Four",
+        "Ommok", "Khet-Khet", "Cell Ursh", "Ngaam", "Hmmon", "Comb Twelve",
+        "Brood Nnar", "Ummung", "Warren Six", "Thrumm", "Mnn-Oth", "Hive Mmol",
+        "Cell Ongh", "Nnim-Nnim", "Comb Twenty", "Brood Vumm", "Ghmm", "Ammakh",
+        "Chamber Nine", "Omm-Ketta", "Ngor Ngor", "Cell Hmmak", "Warren Thirteen", "Vnng",
+        "Mmakh-Tul", "Comb Seven", "Brood Ushk", "Nnothul", "Umm-Nakh", "Chamber One",
+        "Hmmul-Hmm", "Ngeth", "Cell Ommar", "Comb Thirty", "Brood Mnnak", "Tunnel Oshk"
+      ]
+    },
+    {
+      "id": "pellacan",
+      "name": "The Pellacan Trade Compact",
+      "short": "Pellacan",
+      "adjective": "Pellacani",
+      "style": "Brisk mercantile English compounds and founder surnames: ports, wharves, exchanges, depots and tariffs, sometimes tagged with a lot number.",
+      "planets": [
+        "Pellacan", "Tollmark", "Ledgerport", "Brightwharf", "Cassion Exchange", "Harrowmint",
+        "Guildhaven", "Coinreach", "Varro's Landing", "Tariff Nine", "Bondstead", "Dunmore Exchange",
+        "Quayside", "Lot Forty-Two", "Brass Wharf", "Surety", "Factorage", "Consignment",
+        "Caskell Depot", "Freeport Hollis", "Tithebridge", "Penny Reach", "Marchant's Rest", "Bursar",
+        "Ingot Landing", "Dockmere", "Teller's Cross", "Half-Share", "Weighhouse", "Barrowgate",
+        "Orlane Depot", "Stapleford", "Counting Hill", "Lot Seventeen", "Brokerage", "Fairweight",
+        "Oddments", "Candle Wharf", "Escrow", "Dividend", "Cargo Vell", "Tallystone"
+      ]
+    },
+    {
+      "id": "ecclesiate",
+      "name": "The Ecclesiate of Ashen Light",
+      "short": "Ecclesiate",
+      "adjective": "Ecclesiate",
+      "style": "Reverent liturgical names: vigils, candles, lanterns, hallows and litanies, or venerated founders given an honorific such as Blessed or Hallowed.",
+      "planets": [
+        "Ashen Light", "First Candle", "Vigil of Ovren", "Hallowed Teshe", "Blessed Auremont", "Lantern Vale",
+        "Penitence", "Ember Litany", "Kindled Hearth", "Hallow Orsende", "Censer", "Vigil Reach",
+        "Undying Wick", "Sanctis Vorne", "Litany of Hesk", "Blessed Idrenne", "Cindershrine", "Ashfont",
+        "Hallow Vessane", "Second Candle", "Lumen Oriel", "Pyre Hollow", "Devotion", "Wickmere",
+        "Reliquary", "Vesper Ash", "Dawnsong Hold", "Hallowed Corran", "Ember Oriel", "Absolution",
+        "Blessed Yorrene", "Lantern Kell", "Oathflame", "Ninth Candle", "Sanctum Ash", "Vigil of Cerrow",
+        "Hallow Anvel", "Embercourt", "Brightpenance", "Candleward", "Ashen Choir", "Sootmere"
+      ]
+    },
+    {
+      "id": "lattice",
+      "name": "The Lattice",
+      "short": "The Lattice",
+      "adjective": "Lattice",
+      "style": "Cold alphanumeric designations: a function word (Node, Relay, Kernel, Substrate, Array, Cache) plus a hyphenated code or version number.",
+      "planets": [
+        "Node 01", "Relay K-7", "Kernel 11", "Substrate 04", "Array 9-3", "Node 22-B",
+        "Cache D-2", "Relay 0x1F", "Kernel 3-1-4", "Substrate 19", "Array 6-A", "Node 117",
+        "Bus 44", "Relay Q-9", "Register 8", "Kernel 0-9", "Node 5-5", "Substrate 71-C",
+        "Array 12-0", "Mirror 3", "Shard 48", "Node 33-Z", "Relay 2-2-2", "Kernel 77",
+        "Lattice 00", "Cache 14", "Substrate 1-B", "Array 88", "Node 9-Null", "Relay 16-F",
+        "Kernel 4-4", "Bus 7-C", "Register 12", "Mirror 61", "Shard 9-1", "Node 256",
+        "Substrate 13-K", "Array 3-3-3", "Relay 90", "Kernel 2-X", "Cache 0-1", "Node 64"
+      ]
+    },
+    {
+      "id": "longwake",
+      "name": "The Wanderers of the Long Wake",
+      "short": "Long Wake",
+      "adjective": "Wakeborn",
+      "style": "Plain two-word moorings and remembered moments of the voyage: an ordinal plus Mooring, Anchorage or Rest, or a short phrase of what happened there.",
+      "planets": [
+        "First Mooring", "Third Anchorage", "Kessa's Rest", "Slow Drift", "Where We Waited", "Ninth Mooring",
+        "Long Wake", "Still Water", "Last Beacon", "Half Sail", "Quiet Mooring", "Seventh Rest",
+        "Grandmother's Stop", "Cold Anchorage", "The Turning", "Brief Harbor", "Fourth Mooring", "Old Tethers",
+        "Where Jossen Sang", "Fair Wind Rest", "Twelfth Mooring", "Deep Anchorage", "Gathering Place", "Salt Rest",
+        "Second Mooring", "Rope's End", "The Long Stop", "Far Anchorage", "Morrow's Wait", "Calm Mooring",
+        "Fifth Rest", "Where We Mended", "Tideless", "Eighth Anchorage", "Kinfire", "Hull Rest",
+        "Sixth Mooring", "Wide Berth", "Driftwood Stop", "Tenth Rest", "Patient Harbor", "Last Mooring"
+      ]
+    },
+    {
+      "id": "sennet",
+      "name": "The Archivum of Sennet",
+      "short": "Archivum",
+      "adjective": "Sennetic",
+      "style": "Bookish catalogue terms and scholars' names: Folio, Codex, Lemma or Appendix with an ordinal, printers' vocabulary, or a named proof or thesis.",
+      "planets": [
+        "Sennet", "Folio Twelve", "Marginalia", "Colophon", "Errata", "Glossary",
+        "Lemma Nine", "Orvane's Proof", "Appendix C", "Codex Hallam", "Index Major", "Footnote",
+        "Corrigenda", "Thesis Ambrell", "Fascicle", "Palimpsest", "Quire Seven", "Folio Ninety",
+        "Lemma Four", "Concordance", "Recension", "Addendum", "Monograph", "Compendium Oss",
+        "Volume Thirty", "Scholium", "Frontispiece", "Abstract", "Codex Lorrin", "Bibliotheca",
+        "Rubric", "Variorum", "Lemma Eleven", "Folio Forty", "Second Edition", "Pallis Theorem",
+        "Incunable", "Omnibus", "Table of Contents", "Endpaper", "Dissertation", "Octavo", "Corollary"
+      ]
+    },
+    {
+      "id": "deepsong",
+      "name": "The Deepsong Tideholds",
+      "short": "Deepsong",
+      "adjective": "Tideborn",
+      "style": "Long, rolling vowel-heavy names with doubled oo, aa and ee and soft l, w, n and r, like currents and depths sung underwater.",
+      "planets": [
+        "Lowanu", "Oorali", "Ulooma", "Weyruu", "Nahalee", "Thaloon",
+        "Maaren Deep", "Olowe", "Iiwana", "Ruunalo", "Haalee", "Wenoora",
+        "Looluwa", "Anaroo", "Sulaane", "Oonwe", "Meelora", "Taawen",
+        "Rooliwa", "Elunaa", "Noowali", "Waalune", "Oriloo", "Hulaanu",
+        "Leewara", "Muunaro", "Aawelo", "Soolune", "Yaanori", "Ulwee",
+        "Roonaa", "Naluwee", "Owaalu", "Teelona", "Waanoru", "Loomere",
+        "Ileewa", "Oolanu", "Haruune", "Weelowa", "Anuulo", "Seewan"
+      ]
+    },
+    {
+      "id": "kessuri",
+      "name": "The Kessuri Skyholds",
+      "short": "Kessuri",
+      "adjective": "Kessuri",
+      "style": "Airy, breathy names built on h, s, y and th with -ail, -eth and -yr endings, often naming a wind, stratum or altitude band.",
+      "planets": [
+        "Kessuri", "Hessail", "Ythrene", "Highsail", "Sythar Drift", "Upper Hesh",
+        "Calm Stratum", "Ashyr", "Thessail", "Hyeth", "Windward Hae", "Tharysail",
+        "Yshael", "Hollowind", "Sayeth", "Cirrail", "Hyth Stratum", "Aethryl",
+        "Sheyrin", "Updraft Yeh", "Thysail", "Haeyr", "Lowcloud", "Syhael",
+        "Eythrail", "Hasseth", "Stormsail", "Yrsthe", "Shallow Sky", "Hethyr",
+        "Airsail", "Ysseth", "Thaeyr", "Drift Hassail", "Nimbail", "Wyethar",
+        "Highhesh", "Sailyr", "Tharyeth", "Quiet Stratum", "Ysthail", "Hyssar"
+      ]
+    },
+    {
+      "id": "quarn",
+      "name": "The Quarnic Chord",
+      "short": "Quarn Chord",
+      "adjective": "Quarnic",
+      "style": "Sharp resonant names with q, x, k and z against clustered vowels, naming facets, angles, cleavages and tones; some are a Facet or Tone with an ordinal.",
+      "planets": [
+        "Quarn", "Kiiq", "Xaelith", "Facet Ur", "Seventh Facet", "Qorith",
+        "Vitrene", "Tessela", "Axiolith", "Zekk Prism", "Xiqo", "Qaxil",
+        "Ninth Tone", "Kaxoq", "Zirquil", "Facet Ixa", "Quoxen", "Third Cleave",
+        "Ixqar", "Kzel", "Oqxith", "Qiiz", "Twelfth Facet", "Tone Zeq",
+        "Xuqarri", "Kelqiz", "Qavix", "Lithoq", "Zaxq", "Fifth Tone",
+        "Facet Oq", "Qixen", "Xorquil", "Keq-Iza", "Vexiq", "Qulith",
+        "Zixaro", "Quaxxen", "Oxil", "Facet Qaa", "Kriix", "Zoqeth", "First Tone"
+      ]
+    },
+    {
+      "id": "gallowmark",
+      "name": "The Gallowmark Captains",
+      "short": "Gallowmark",
+      "adjective": "Gallowmark",
+      "style": "Swaggering pirate nicknames and grudges: short blunt words about loot, knives, debts and bad luck, often with a possessive.",
+      "planets": [
+        "Gallowmark", "Widow's Cut", "Three Knives", "Rustgutter", "Nine Teeth", "Dead Man's Share",
+        "Bad Penny", "Cutpurse Reach", "Bilge", "Hangman's Due", "The Grudge", "Black Tally",
+        "Sawbones", "Knucklebone", "Spite", "Short Straw", "Red Ledger", "Plunder Row",
+        "Broken Compass", "Salt Debt", "One-Eye's", "Mutiny", "Gullet", "No Quarter",
+        "Last Coin", "Fenced Goods", "Scuttle", "Powder Keg", "Rotgut", "Crooked Jib",
+        "Vask's Grin", "Ransom", "Keelhaul", "Quickblade", "Stump", "Unlucky Seven",
+        "Fool's Gold", "Wrecker's Light", "Tarpit", "Brigand's Rest", "Hush Money", "Dog Watch",
+        "Deadlight", "Grog Hollow"
+      ]
+    },
+    {
+      "id": "auv",
+      "name": "The Sundered Throne of Auv",
+      "short": "Auv Throne",
+      "adjective": "Auvic",
+      "style": "Ponderous archaic names heavy with ae, ou and eu diphthongs and -oum, -eth and -aris endings, naming dead emperors, ruined seats and regnal numbers in words.",
+      "planets": [
+        "Auv", "Thaeroum", "Ouvarane", "Caelouth", "Aureloun", "Old Seat Maeth",
+        "Vaelouris", "Eurhaeth", "Seat of Oum", "Maeroun", "Draesaeum", "Ouloreth",
+        "Haeumeth", "Ninth Dynasty", "Aeloun", "Paeroum", "Last Regnal", "Vourhaeth",
+        "Throne Dust", "Ceulaeth", "Ouvaris", "Aethoum", "Caerloun", "Faded Thaeris",
+        "Oumeth", "Euvaraeth", "Thaos the Ninth", "Haelouris", "Ruin of Aune", "Saeroum",
+        "Voul-Aeth", "Praeloun", "Old Aumeris", "Deurhaeth", "Thaeloris", "Ourvaeth",
+        "Caeloum", "Aeneth Fallen", "Vaerous", "Mourning Seat", "Ebbing Thaen", "Sundered Hall"
+      ]
+    },
+    {
+      "id": "cinderreach",
+      "name": "The Cinder Reach League",
+      "short": "Cinder Reach",
+      "adjective": "Reacher",
+      "style": "Blunt, unpretentious frontier English about dirt, luck, grit and gear: nicknames a tired colonist would shout across a landing pad.",
+      "planets": [
+        "Cinder Reach", "Dustbowl", "Big Nothing", "Second Chance", "Rusty's", "Mudflat",
+        "Fresh Start", "Hardscrabble", "Last Dollar", "Bootstrap", "Gravel", "Hangover",
+        "Patch", "Scrapyard", "Half-Built", "Tin Roof", "Cheap Seats", "Stubborn",
+        "Good Enough", "Dirt Cheap", "Breakwater", "Grubstake", "Elbow Grease", "Hardpan",
+        "Tarmac", "Rough Cut", "Make-Do", "Clay Pit", "Firstlight", "Sunburn",
+        "Long Shot", "Shanty", "Overtime", "Backbreaker", "Flatiron", "Stake Two",
+        "Grit", "Claim Nine", "Paydirt", "Ironweed", "Low Rent", "Busted Axle",
+        "Plain Dealing", "Hard Bargain"
+      ]
+    },
+    {
+      "id": "verdant",
+      "name": "The Verdant Sodality",
+      "short": "Sodality",
+      "adjective": "Verdant",
+      "style": "Gentle botanical names: groves, seeds, mosses, plant anatomy and cultivar-like Latinate binomials, as if every world were a garden bed being tended.",
+      "planets": [
+        "Rootholm", "Mossreach", "Seedling Vale", "Fallow", "Greenward", "Virens Tall",
+        "Tendril", "Bramblefold", "Loam", "Sapwood", "Cultivar Ossa", "Fernhollow",
+        "Spore Garden", "Hedgerow", "Trellis", "Orchard Hale", "Canopy", "Verdure",
+        "Mulch", "Rhizome", "Pollenreach", "Fallowfield", "Lichen Vale", "Arbor Quell",
+        "Mistlethorn", "Petiole", "Sepal", "Taproot", "Understory", "Graftling",
+        "Bower", "Thornward", "Nettlebed", "Humus", "Wildflower Rise", "Cotyledon",
+        "Sward", "Pruning Hall", "Vinewright", "Rootmother", "Glasshouse", "Heartwood",
+        "Clover Bank", "Seedvault"
+      ]
+    },
+    {
+      "id": "fennick",
+      "name": "The Fennick Mummers",
+      "short": "Mummers",
+      "adjective": "Fennick",
+      "style": "Playful misdirections and stage patter: evasive phrases, riddling non-answers and theatrical cues, so no outsider is ever sure which world is which.",
+      "planets": [
+        "Elsewhere", "Nowhere Much", "Ask Again", "Not This One", "Probably", "Somewhere Else",
+        "Guess Again", "Never Mind", "Behind You", "Third Curtain", "Encore", "Sleight",
+        "Wrong Door", "Intermission", "Misdirection", "Trust Me", "The Other One", "Just Kidding",
+        "Stage Left", "Not Quite", "Maybe Later", "Hidden Pocket", "Applause", "Mirror Trick",
+        "Last Laugh", "Over There", "Backstage", "False Bottom", "Double Take", "Trapdoor",
+        "Wink", "Red Herring", "Punchline", "Who's Asking", "Second Guess", "Missed Cue",
+        "Smoke and Pins", "Costume Change", "Plausibly", "Hat Trick", "Vanishing Act", "Grand Finale",
+        "Rehearsal", "Nobody's Home"
+      ]
+    },
+    {
+      "id": "forgeward",
+      "name": "The Forgeward Union",
+      "short": "Forgeward",
+      "adjective": "Forgeward",
+      "style": "Industrial shop-floor names: tools, processes, materials and shift or furnace numbers, with the heavy consonant clank of a foundry.",
+      "planets": [
+        "Forgeward", "Foundry Six", "Rivet", "Bellows", "Smelt", "Anvil Row",
+        "Slagheap", "Crucible", "Tongs", "Third Shift", "Quench", "Billet Nine",
+        "Dropforge", "Girder", "Kiln", "Tap Line", "Clinker", "Boltworks",
+        "Furnace Twelve", "Ladle", "Rolling Mill", "Pig Iron", "Overhaul", "Coke Oven",
+        "Tempering", "Millwright", "Gantry", "Piston", "Swarf", "Lathe",
+        "Blast Row", "Stamping Yard", "Weld Seam", "Night Shift", "Flux", "Chisel",
+        "Grindstone", "Tin Smelt", "Sprocket", "Hot Rolled", "Wrought", "Coalgate",
+        "Turbine", "Ironworks"
+      ]
+    }
+  ],
+  "neutral": [
+    "Survey 118", "Survey 204", "Survey 377", "Survey 519", "Object 71", "Object 88",
+    "Object 1102", "Waypoint 9", "Waypoint 23", "Waypoint 61", "Beacon 14", "Beacon 40",
+    "Cairn 7", "Cairn 19", "Marker 22", "Marker 58", "Marker 103", "Transit 4",
+    "Transit 11", "Halden's Find", "Oberlan Rock", "Marsh's Error", "Alder Drift", "Sounding 31",
+    "Sounding 90", "KW-2203", "KW-0417", "KW-7781", "Candidate 16", "Candidate 42",
+    "Pruett's Gap", "Outpost 9", "Reference 12", "Reference 80", "Datum 5", "Datum 77",
+    "Grid 4-4", "Grid 9-12", "Minor Body 3", "Farrow's Doubt", "Wendell's Mark", "Lacuna 2",
+    "Perihelion 7", "Aphelion 3", "Station 12", "Unsurveyed 2", "Unclaimed 7", "Target 33",
+    "Pike's Find", "Rendall's Rock", "Ostrow's Error", "Meridian 15", "Sector 4-A", "Catalogue 66",
+    "Entry 1207", "Entry 309", "Provisional 5", "Provisional 18", "Gault's Reckoning", "Tiller's Wager",
+    "Body 44-C", "Anomaly 6", "Anomaly 21", "Ashby's Find", "Blank 9", "Nameless 4",
+    "Far Marker", "Low Survey"
+  ]
+}

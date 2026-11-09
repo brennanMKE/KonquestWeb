@@ -14,7 +14,7 @@ test("the host watches three computers play", async ({ page }) => {
   await delay.dispatchEvent("change");
   await page.getByRole("button", { name: "Start game" }).click();
 
-  await expect(page.getByText(/You're watching\. Computer \d is moving/)).toBeVisible();
+  await expect(page.getByText(/You're watching\. .+ is moving/)).toBeVisible();
   await expect(page.getByText("Round 3", { exact: false }).first()).toBeVisible({ timeout: 30_000 });
   await expect(page.getByRole("button", { name: "End turn" })).toHaveCount(0);
   // A watcher of an all-computer game sees every ship count.

@@ -4,6 +4,8 @@
 import type { ClientMsg, GameEvent, Phase, PlanetView, SeatInfo, ServerMsg, Settings, Standing, View } from "./proto";
 import { NEUTRAL, SPECTATOR } from "./proto";
 import { play, type Sound } from "./audio";
+import { factionOf, planetName } from "./names";
+import type { Faction } from "./names";
 
 export interface LogEntry {
   id: number;
@@ -113,14 +115,40 @@ class Store {
     return this.phase === "playing" && this.active === this.seat;
   }
 
+  /** A seat's faction. */
+  faction(seat: number): Faction | null {
+    return factionOf(this.room, seat);
+  }
+
+  /** A seat's display name: a computer goes by its faction, a human by name. */
+  playerName(seat: number): string {
+    const s = this.seats[seat];
+    if (!s) return `Player ${seat + 1}`;
+    return s.kind === "ai" ? (this.faction(seat)?.short ?? s.name) : s.name;
+  }
+
   seatName(seat: number): string {
     if (seat === NEUTRAL) return "neutral";
     if (seat === this.seat) return "you";
-    return this.seats[seat]?.name ?? `Player ${seat + 1}`;
+    return this.playerName(seat);
   }
 
+  /** A planet's current name. */
   planetName(id: number): string {
     return this.view?.planets[id]?.name ?? "?";
+  }
+
+  /** What a planet is called by a given holder. */
+  planetNameFor(id: number, owner: number): string {
+    return planetName(this.room, id, owner);
+  }
+
+  /** Gives every planet in a view its holder's name, keeping the letter. */
+  private named<T extends { planets: PlanetView[] }>(v: T): T {
+    return {
+      ...v,
+      planets: v.planets.map((p) => ({ ...p, letter: p.letter ?? p.name, name: planetName(this.room, p.id, p.owner) })),
+    };
   }
 
   join(room: string, name: string) {
@@ -183,24 +211,24 @@ class Store {
         this.host = m.host;
         this.seats = m.seats;
         this.settings = m.settings;
-        this.mapPreview = m.mapPreview;
+        this.mapPreview = m.mapPreview ? this.named({ planets: m.mapPreview }).planets : null;
         this.aiKinds = m.aiKinds;
         break;
       case "your_turn":
         if (this.active !== this.seat || this.round !== m.round) play("turn");
-        this.view = m.view;
+        this.view = this.named(m.view);
         this.round = m.round;
         this.active = this.seat;
         this.deadline = m.deadline ?? 0;
         break;
       case "player_turn":
-        this.view = m.view;
+        this.view = this.named(m.view);
         this.round = m.round;
         this.active = m.seat;
         this.deadline = m.deadline ?? 0;
         break;
       case "fleet_ack": {
-        this.view = m.view;
+        this.view = this.named(m.view);
         const f = m.view.fleets.find((f) => f.id === m.fleetId);
         play("launch");
         if (f) {
@@ -212,7 +240,7 @@ class Store {
         break;
       }
       case "round_result":
-        this.view = m.view;
+        this.view = this.named(m.view);
         for (const e of m.events) this.addEvent(e);
         // A replaying board plays each battle's sound as its battle ends.
         if (!this.replays) play(...m.events.map((e) => soundFor(e, this.seat)).filter((s): s is Sound => s !== null));
@@ -277,7 +305,8 @@ class Store {
   }
 
   private addEvent(e: GameEvent) {
-    const planet = `Planet ${this.planetName(e.planet)}`;
+    // A planet is named by whoever held it when the event happened.
+    const planet = e.planet >= 0 ? this.planetNameFor(e.planet, e.defender) : "";
     const me = this.seat;
     switch (e.kind) {
       case "reinforced":
@@ -287,11 +316,15 @@ class Store {
         if (e.attacker === me) {
           this.addLog(
             e.round,
-            `${planet} has fallen to you (from ${this.seatName(e.defender)}). ${e.remaining} of ${e.ships} ships survived.`,
+            `${planet} has fallen to you (from ${this.seatName(e.defender)}) and is now ${this.planetNameFor(e.planet, e.attacker)}. ${e.remaining} of ${e.ships} ships survived.`,
             "good",
           );
         } else {
-          this.addLog(e.round, `${planet} has fallen to ${this.seatName(e.attacker)}.`, "bad");
+          this.addLog(
+            e.round,
+            `${planet} has fallen to ${this.seatName(e.attacker)} and is now ${this.planetNameFor(e.planet, e.attacker)}.`,
+            "bad",
+          );
         }
         break;
       case "held":

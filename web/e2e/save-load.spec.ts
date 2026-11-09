@@ -8,7 +8,7 @@ test("the host saves a game and loads it into a new room", async ({ page }) => {
   const delay = page.getByLabel("Computer delay, s");
   await delay.fill("0");
   await delay.dispatchEvent("change");
-  await expect(page.getByText("Computer 1")).toBeVisible();
+  await expect(page.locator(".seats li")).toHaveCount(2);
   await page.getByRole("button", { name: "Start game" }).click();
 
   for (let round = 1; round <= 3; round++) {

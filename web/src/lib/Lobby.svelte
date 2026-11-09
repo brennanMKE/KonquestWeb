@@ -98,7 +98,10 @@
       {#each store.seats as s (s.seat)}
         <li>
           <span class="dot" style:background={ownerColor(s.seat)}></span>
-          <span class="name">{s.name}</span>
+          <span class="name">
+            {s.kind === "ai" ? store.faction(s.seat)?.name : s.name}
+            {#if s.kind === "human"}<small>{store.faction(s.seat)?.name}</small>{/if}
+          </span>
           {#if s.seat === store.seat}<span class="badge">you</span>{/if}
           {#if s.seat === store.host && store.host >= 0}<span class="badge">host</span>{/if}
           {#if s.kind === "ai"}<span class="badge">{aiNames[s.aiKind ?? ""]?.replace(/ \(.*\)$/, "") ?? "computer"}</span>{/if}
@@ -246,6 +249,11 @@
     height: 12px;
     border-radius: 50%;
     flex: none;
+  }
+  .name small {
+    display: block;
+    font-size: 12px;
+    color: var(--muted);
   }
   .name {
     flex: 1;

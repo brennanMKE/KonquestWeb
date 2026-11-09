@@ -2,6 +2,7 @@
   import type { SeatInfo, View } from "./proto";
   import { ownerColor } from "./colors";
   import { SPECTATOR } from "./proto";
+  import { store } from "./store.svelte";
 
   // Mid-game standings, from the player's own view only: planet counts are
   // public, production only where visible, ships only for yourself.
@@ -34,7 +35,7 @@
       <tr class:out={!r.alive}>
         <td>
           <span class="dot" style:background={ownerColor(r.s.seat)}></span>
-          {r.s.seat === view.seat ? "You" : r.s.name}
+          {r.s.seat === view.seat ? "You" : store.playerName(r.s.seat)}
         </td>
         <td>{r.planets}</td>
         <td>{r.production ?? "?"}</td>

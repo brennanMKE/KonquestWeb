@@ -27,7 +27,10 @@ export interface Settings {
 
 export interface PlanetView {
   id: number;
+  /** The display name, set by the client from the holder's faction. */
   name: string;
+  /** The server's letter name, kept as the keyboard shortcut. */
+  letter?: string;
   pos: Pos;
   owner: number;
   ships?: number;

@@ -148,7 +148,10 @@
         <circle class="ring" class:dest={p.id === dest} cx={cx(p)} cy={cy(p)} r={r + 0.1} />
       {/if}
       <circle cx={cx(p)} cy={cy(p)} {r} fill={ownerColor(p.owner)} class="body" />
-      <text class="name" x={cx(p)} y={cy(p)}>{p.name}</text>
+      <text class="name" x={cx(p)} y={cy(p)}>{p.letter ?? p.name}</text>
+      {#if p.letter}
+        <text class="title" x={cx(p)} y={cy(p) - r - 0.14}>{p.name}</text>
+      {/if}
       {#if p.ships !== undefined}
         <text class="ships" x={cx(p)} y={cy(p) + r + 0.2}>{p.ships}</text>
       {/if}
@@ -196,6 +199,15 @@
     text-anchor: middle;
     dominant-baseline: central;
     fill: #0b0e17;
+    pointer-events: none;
+  }
+  .title {
+    font-size: 0.2px;
+    text-anchor: middle;
+    fill: var(--muted);
+    paint-order: stroke;
+    stroke: var(--bg);
+    stroke-width: 0.06px;
     pointer-events: none;
   }
   .ships {

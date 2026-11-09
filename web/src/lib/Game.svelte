@@ -91,7 +91,7 @@
         source = id;
         dest = null;
       } else if (p.owner === store.seat) {
-        store.showToast(`Planet ${p.name} has no ships to send.`);
+        store.showToast(`${p.name} has no ships to send.`);
       } else {
         store.showToast("Pick one of your own planets first.");
       }
@@ -141,12 +141,12 @@
     const target = e.target as HTMLElement;
     if (target.tagName === "INPUT" || e.metaKey || e.ctrlKey || e.altKey) return;
     if (/^[a-z]$/i.test(e.key)) {
-      const p = view.planets.find((p) => p.name === e.key.toUpperCase());
+      const p = view.planets.find((p) => p.letter === e.key.toUpperCase());
       if (p) pick(p.id);
     }
   }
 
-  let activeName = $derived(store.seats[store.active]?.name ?? "");
+  let activeName = $derived(store.active >= 0 ? store.playerName(store.active) : "");
   let alive = $derived(view.players[store.seat]?.alive ?? false);
 
   function stat(v: number | undefined, digits = 0) {
@@ -189,8 +189,8 @@
     {/if}
     {#if store.conn !== "open"}<span class="badge warn">Reconnecting…</span>{/if}
     {#each store.seats as s (s.seat)}
-      <span class="player" class:out={!view.players[s.seat]?.alive} class:away={!s.connected} title={s.name}>
-        <span class="dot" style:background={ownerColor(s.seat)}></span>{s.seat === store.seat ? "You" : s.name}
+      <span class="player" class:out={!view.players[s.seat]?.alive} class:away={!s.connected} title={store.faction(s.seat)?.name ?? s.name}>
+        <span class="dot" style:background={ownerColor(s.seat)}></span>{s.seat === store.seat ? "You" : store.playerName(s.seat)}
         {#if store.isHost && !s.connected && s.kind === "human" && store.phase === "playing"}
           <button
             class="small"
@@ -312,7 +312,8 @@
         {#if infoPlanet}
           <h3>
             <span class="dot" style:background={ownerColor(infoPlanet.owner)}></span>
-            Planet {infoPlanet.name}
+            {infoPlanet.name}
+            {#if infoPlanet.letter}<span class="key" title="Type this letter to pick it">{infoPlanet.letter}</span>{/if}
           </h3>
           <dl>
             <dt>Owner</dt>
@@ -375,7 +376,7 @@
             {#each store.standings as s (s.seat)}
               <tr>
                 <td>{s.rank}</td>
-                <td><span class="dot" style:background={ownerColor(s.seat)}></span> {store.seats[s.seat]?.name}</td>
+                <td><span class="dot" style:background={ownerColor(s.seat)}></span> {store.playerName(s.seat)}</td>
                 <td>{s.planets}</td>
                 <td>{s.ships}</td>
                 <td>{s.stats.shipsBuilt}</td>
@@ -529,6 +530,14 @@
   }
   .timer.low {
     color: var(--bad);
+  }
+  .key {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 1px 5px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--muted);
   }
   .info h3 {
     margin: 0 0 8px;

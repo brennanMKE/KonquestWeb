@@ -149,6 +149,9 @@
       <span class="timer" class:low={secondsLeft <= 10}>{Math.floor(secondsLeft / 60)}:{String(secondsLeft % 60).padStart(2, "0")}</span>
     {/if}
     <span class="spacer"></span>
+    {#if store.isHost}
+      <a class="save" href="/api/rooms/{store.room}/save?token={store.token}" download>Save game</a>
+    {/if}
     {#if store.conn !== "open"}<span class="badge warn">Reconnecting…</span>{/if}
     {#each store.seats as s (s.seat)}
       <span class="player" class:out={!view.players[s.seat]?.alive} class:away={!s.connected} title={s.name}>
@@ -441,6 +444,10 @@
   .tabs button {
     flex: 1;
     padding: 4px 6px;
+    font-size: 13px;
+  }
+  .save {
+    color: var(--accent);
     font-size: 13px;
   }
   .timer {

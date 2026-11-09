@@ -4,6 +4,8 @@ import (
 	"math/rand/v2"
 	"strings"
 	"sync"
+
+	"parallax/internal/proto"
 )
 
 // codeAlphabet leaves out letters that are easy to confuse (I, L, O).
@@ -27,6 +29,14 @@ func NewManager(opts Options) *Manager {
 
 // Create starts a new room with an unused code.
 func (m *Manager) Create() *Room {
+	r, _ := m.create(nil)
+	return r
+}
+
+// Load starts a room from a saved game.
+func (m *Manager) Load(f *proto.SaveFile) (*Room, error) { return m.create(f) }
+
+func (m *Manager) create(f *proto.SaveFile) (*Room, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	code := newCode()
@@ -34,6 +44,11 @@ func (m *Manager) Create() *Room {
 		code = newCode()
 	}
 	r := New(code, m.opts)
+	if f != nil {
+		if err := r.load(f); err != nil {
+			return nil, err
+		}
+	}
 	m.rooms[code] = r
 	go func() {
 		r.Run()
@@ -41,7 +56,7 @@ func (m *Manager) Create() *Room {
 		delete(m.rooms, code)
 		m.mu.Unlock()
 	}()
-	return r
+	return r, nil
 }
 
 // Get finds a room by code, ignoring case.

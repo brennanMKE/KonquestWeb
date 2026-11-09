@@ -34,6 +34,24 @@
     }
   }
 
+  async function loadFile(e: Event) {
+    const file = (e.currentTarget as HTMLInputElement).files?.[0];
+    if (!file) return;
+    busy = true;
+    error = "";
+    try {
+      const res = await fetch("/api/load", { method: "POST", body: await file.text() });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error ?? `server said ${res.status}`);
+      remember();
+      onenter(body.code, name.trim());
+    } catch (e) {
+      error = `Couldn't load that game: ${(e as Error).message}`;
+    } finally {
+      busy = false;
+    }
+  }
+
   async function join(e: SubmitEvent) {
     e.preventDefault();
     const c = code.trim().toUpperCase();
@@ -76,6 +94,10 @@
       <input bind:value={code} maxlength="4" placeholder="Code" aria-label="Room code" />
       <button disabled={busy || !code.trim()}>Join</button>
     </form>
+    <label class="load">
+      <input type="file" accept=".json,application/json" onchange={loadFile} disabled={busy} />
+      <span>Load a saved game…</span>
+    </label>
   {/if}
 
   {#if error}<p class="error">{error}</p>{/if}
@@ -107,6 +129,21 @@
     flex: 1;
     text-transform: uppercase;
     letter-spacing: 0.2em;
+  }
+  .load {
+    color: var(--accent);
+    cursor: pointer;
+    font-size: 14px;
+    text-align: center;
+  }
+  .load input {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+  }
+  .load:focus-within span {
+    outline: 2px solid var(--accent);
   }
   form > .primary,
   .primary {

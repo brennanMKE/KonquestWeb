@@ -6,14 +6,15 @@ see, and turns resolve on an authoritative Go server over WebSockets.
 
 The name nods to stellar parallax, the way astronomers measure the distance to stars.
 
-**Status:** milestone 4 (fleet overview, standings, measure tool, turn timer, 3D maps in 2.5D). See [SPEC.md](SPEC.md) for the design and milestones, and
+**Status:** milestones 1–5 done: a playable online game with rule-based and System 1 computer players,
+save/load, and 3D maps shown in 2.5D. See [SPEC.md](SPEC.md) for the design and milestones, and
 [RULES.md](RULES.md) for the exact rules.
 
 ```sh
 make test                          # rules and AI tests
 make sim ARGS="-seed 7 -depth 4"   # a seeded AI-vs-AI game on a 3D map, with its turn log
 make build && bin/server            # one binary with the web client; open http://localhost:8080
-make e2e                           # browser smoke test (Playwright)
+make e2e                           # browser tests (Playwright)
 ```
 
 ## How it plays
@@ -46,7 +47,39 @@ situation. Any HTTP endpoint that speaks the same `{state, questions}` → `{ans
 plugged in, and every prompt has an "oracle" answer computed from the true game state, so decision
 quality can be measured.
 
-A simple rule-based player is planned as well, so games work without a model running.
+A rule-based player (`Greedy`) needs no model and is always available.
+
+### Running with a model
+
+Start any endpoint with that shape. For example, with System 1 Arcade's Laya server:
+
+```sh
+python agents/laya_server.py --port 8799          # in the System1Arcade checkout, with Laya installed
+bin/server -system1 http://127.0.0.1:8799/predict # hosts can now add "System 1 model" computers
+```
+
+`-system1-key` sends an API key as a Bearer token; `-system1-batch=false` sends one request per state for
+endpoints that don't take batches. If the model can't be reached, that computer plays as Greedy for the
+turn.
+
+### Measuring a model
+
+`cmd/sim` plays seeded games and checks every answer against the oracle:
+
+```sh
+go run ./cmd/sim -q -players 3 -ai system1,greedy,greedy -url http://127.0.0.1:8799/predict -v
+```
+
+With Laya on an M-series Mac, the first wording ("An attack from E on D, an enemy planet that builds a
+fair number of ships, would probably lose, arriving soon.") agreed with the oracle on 79–86% of
+questions; every miss was a "good" answer for a losing attack. Leading with the outcome raised that to
+91–93%. Making the answer options repeat the state's words ("Our attack on D is a bad bet: it would
+probably lose." asked *a good bet or a bad bet?*) reached 100% of 1,764 questions over five games, at
+30–140 ms per decision.
+
+The oracle's own strategy is the ceiling for now, and it's no stronger than Greedy: in 4-player games
+against three Greedy players it won about one game in four. Better strategy (defending, reinforcing,
+timing attacks) is the next step for the computer players.
 
 ## Planned architecture
 

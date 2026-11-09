@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"parallax/internal/ai"
 	"parallax/internal/proto"
 	"parallax/internal/rules"
 )
@@ -657,4 +658,47 @@ func TestTimerSettingsValidated(t *testing.T) {
 			t.Fatalf("settings %+v: %s", s, code)
 		}
 	}
+}
+
+// slowAI thinks until released, so tests can check the room keeps working.
+type slowAI struct{ release chan struct{} }
+
+func (s slowAI) Name() string { return "Slow" }
+func (s slowAI) Orders(rules.View) []ai.Order {
+	<-s.release
+	return nil
+}
+
+func TestAIKindsAndAsyncAI(t *testing.T) {
+	slow := slowAI{release: make(chan struct{})}
+	r := newRoom(t, Options{AI: map[string]ai.Player{"greedy": ai.Greedy{}, "slow": slow}})
+	alice, _ := join(t, r, "Alice")
+	bob, _ := join(t, r, "Bob")
+	alice.send(&proto.AddAI{Kind: "slow"})
+	l := expect[proto.Lobby](alice)
+	if len(l.AIKinds) != 2 || l.AIKinds[0] != "greedy" || l.AIKinds[1] != "slow" {
+		t.Fatalf("AI kinds %v", l.AIKinds)
+	}
+	alice.send(&proto.AddAI{Kind: "system1"})
+	if code := errCode(t, alice); code != proto.ErrBadMessage {
+		t.Fatalf("unoffered kind: %s", code)
+	}
+	s := proto.DefaultSettings()
+	s.AIDelayMs = 0
+	alice.send(&proto.SetSettings{Settings: s})
+	alice.send(&proto.StartGame{})
+	expect[proto.YourTurn](alice)
+	alice.send(&proto.EndTurn{})
+	expect[proto.YourTurn](bob)
+	bob.send(&proto.EndTurn{})
+	for expect[proto.PlayerTurn](alice).Seat != 2 {
+	}
+	// While the computer thinks, the room still answers.
+	alice.send(&proto.EndTurn{})
+	if code := errCode(t, alice); code != proto.ErrNotYourTurn {
+		t.Fatalf("during AI turn: %s", code)
+	}
+	close(slow.release)
+	expect[proto.RoundResult](alice)
+	expect[proto.YourTurn](alice)
 }

@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"log/slog"
 	mrand "math/rand/v2"
+	"slices"
 	"strings"
 	"time"
 
@@ -44,6 +45,10 @@ type Options struct {
 	NewSeed func() uint64
 	// Logger receives room logs. Nil uses slog.Default().
 	Logger *slog.Logger
+	// AI lists the computer players hosts can add, by kind. Nil offers only
+	// Greedy. A seat whose kind isn't listed (say, from a saved game) plays
+	// as Greedy.
+	AI map[string]ai.Player
 }
 
 type seat struct {
@@ -90,6 +95,9 @@ func New(code string, opts Options) *Room {
 	if opts.Logger == nil {
 		opts.Logger = slog.Default()
 	}
+	if opts.AI == nil {
+		opts.AI = map[string]ai.Player{proto.AIGreedy: ai.Greedy{}}
+	}
 	r := &Room{
 		code:     code,
 		opts:     opts,
@@ -114,6 +122,9 @@ func (r *Room) Done() <-chan struct{} { return r.done }
 // so a room nobody joins goes away.
 func (r *Room) Run() {
 	r.armIdle()
+	if r.phase == proto.PhasePlaying {
+		r.announceTurn() // a loaded game: start its computer players
+	}
 	for !r.closed {
 		f := <-r.inbox
 		f()
@@ -375,6 +386,9 @@ func (r *Room) join(c *Client, j *proto.Join) {
 			r.clients[old] = nil
 			r.drop(old)
 		}
+	} else if s = r.openSeat(j.Name); s != nil {
+		// A loaded game: take an unclaimed seat.
+		s.token = newToken()
 	} else {
 		if r.phase != proto.PhaseLobby {
 			r.sendError(c, proto.ErrWrongPhase, "the game has started")
@@ -409,34 +423,33 @@ func (r *Room) setSettings(c *Client, ps proto.Settings) {
 		r.sendError(c, proto.ErrBadSetting, "%v", err)
 		return
 	}
-	if ps.AIDelayMs < 0 || ps.AIDelayMs > 10000 {
-		r.sendError(c, proto.ErrBadSetting, "AI delay must be 0 to 10000 ms")
-		return
-	}
-	if ps.TurnTimerMs < 0 || ps.TurnTimerMs > 3600000 {
-		r.sendError(c, proto.ErrBadSetting, "turn timer must be 0 to 1 hour")
-		return
-	}
-	if ps.DisconnectGraceMs < 0 || ps.DisconnectGraceMs > 600000 {
-		r.sendError(c, proto.ErrBadSetting, "disconnect grace must be 0 to 10 minutes")
+	if err := checkTimers(ps); err != nil {
+		r.sendError(c, proto.ErrBadSetting, "%v", err)
 		return
 	}
 	r.settings = ps
 	r.broadcastLobby()
 }
 
-var aiPlayers = map[string]ai.Player{proto.AIGreedy: ai.Greedy{}}
-
-func aiKind(kind string) (string, bool) {
+func (r *Room) aiKind(kind string) (string, bool) {
 	if kind == "" {
 		kind = proto.AIGreedy
 	}
-	_, ok := aiPlayers[kind]
+	_, ok := r.opts.AI[kind]
 	return kind, ok
 }
 
+func (r *Room) aiKinds() []string {
+	kinds := make([]string, 0, len(r.opts.AI))
+	for k := range r.opts.AI {
+		kinds = append(kinds, k)
+	}
+	slices.Sort(kinds)
+	return kinds
+}
+
 func (r *Room) addAI(c *Client, kind string) {
-	kind, ok := aiKind(kind)
+	kind, ok := r.aiKind(kind)
 	if !ok {
 		r.sendError(c, proto.ErrBadMessage, "unknown AI kind %q", kind)
 		return
@@ -497,7 +510,7 @@ func (r *Room) start(c *Client) {
 }
 
 func (r *Room) replaceWithAI(c *Client, m *proto.ReplaceWithAI) {
-	kind, ok := aiKind(m.Kind)
+	kind, ok := r.aiKind(m.Kind)
 	if !ok {
 		r.sendError(c, proto.ErrBadMessage, "unknown AI kind %q", m.Kind)
 		return
@@ -658,14 +671,28 @@ func (r *Room) runAI() {
 	if s.kind != proto.KindAI {
 		return
 	}
-	p := aiPlayers[s.aiKind]
-	for _, o := range p.Orders(r.game.View(seatN)) {
-		if _, err := r.game.Launch(seatN, o.From, o.To, o.Ships); err != nil {
-			r.log.Error("AI order rejected", "ai", p.Name(), "order", o, "err", err)
-			break
-		}
+	p, ok := r.opts.AI[s.aiKind]
+	if !ok {
+		p = ai.Greedy{}
 	}
-	r.finishTurn(seatN)
+	// A model-backed player can take seconds, so it decides on its own
+	// goroutine from a copy of its view; the room keeps serving meanwhile.
+	v, gen := r.game.View(seatN), r.turnGen
+	go func() {
+		orders := p.Orders(v)
+		r.post(func() {
+			if gen != r.turnGen || r.phase != proto.PhasePlaying {
+				return
+			}
+			for _, o := range orders {
+				if _, err := r.game.Launch(seatN, o.From, o.To, o.Ships); err != nil {
+					r.log.Error("AI order rejected", "ai", p.Name(), "order", o, "err", err)
+					break
+				}
+			}
+			r.finishTurn(seatN)
+		})
+	}()
 }
 
 func (r *Room) seatInfos() []proto.SeatInfo {
@@ -679,7 +706,7 @@ func (r *Room) seatInfos() []proto.SeatInfo {
 
 func (r *Room) broadcastLobby() {
 	msg := &proto.Lobby{Room: r.code, Phase: r.phase, Host: r.seatIndex(r.host),
-		Seats: r.seatInfos(), Settings: r.settings, MapPreview: r.mapPreview()}
+		Seats: r.seatInfos(), Settings: r.settings, MapPreview: r.mapPreview(), AIKinds: r.aiKinds()}
 	for c, s := range r.clients {
 		if s != nil {
 			r.send(c, msg)
@@ -706,3 +733,106 @@ func (r *Room) mapPreview() []rules.PlanetView {
 
 // ErrNoRoom is returned for an unknown room code.
 var ErrNoRoom = errors.New("no such room")
+
+// openSeat finds an unclaimed human seat, which only a loaded game has: the
+// seat with this name if there is one, else the first.
+func (r *Room) openSeat(name string) *seat {
+	var first *seat
+	for _, s := range r.seats {
+		if s.kind != proto.KindHuman || s.token != "" {
+			continue
+		}
+		if strings.EqualFold(s.name, cleanName(name, "")) {
+			return s
+		}
+		if first == nil {
+			first = s
+		}
+	}
+	return first
+}
+
+// Save returns the game file for a started game: seed, settings, seats and
+// the actions log. It asks the room goroutine and waits. Only the host's
+// token may save, because the log reveals every player's orders.
+func (r *Room) Save(token string) (*proto.SaveFile, error) {
+	type result struct {
+		f   *proto.SaveFile
+		err error
+	}
+	ch := make(chan result, 1)
+	if !r.post(func() {
+		switch {
+		case r.host == nil || token == "" || r.host.token != token:
+			ch <- result{err: ErrNotHost}
+		case r.game == nil:
+			ch <- result{err: ErrNoGame}
+		default:
+			f := &proto.SaveFile{Version: proto.SaveVersion, Seed: r.game.Seed(), Round: r.game.Round(),
+				Settings: r.settings, Actions: r.game.Actions()}
+			for _, s := range r.seats {
+				f.Seats = append(f.Seats, proto.SavedSeat{Name: s.name, Kind: s.kind, AIKind: s.aiKind})
+			}
+			ch <- result{f: f}
+		}
+	}) {
+		return nil, ErrNoRoom
+	}
+	res := <-ch
+	return res.f, res.err
+}
+
+// Errors from Save and Load.
+var (
+	ErrNotHost = errors.New("only the host can save the game")
+	ErrNoGame  = errors.New("the game hasn't started")
+)
+
+// load sets up a new, not yet running room from a game file: the game is
+// replayed, computer seats are ready, and human seats wait to be claimed.
+func (r *Room) load(f *proto.SaveFile) error {
+	if f.Version != proto.SaveVersion {
+		return fmt.Errorf("unsupported save version %d", f.Version)
+	}
+	if err := checkTimers(f.Settings); err != nil {
+		return err
+	}
+	g, err := rules.Replay(len(f.Seats), f.Settings.Settings, f.Seed, f.Actions)
+	if err != nil {
+		return fmt.Errorf("replaying the game: %w", err)
+	}
+	for i, ss := range f.Seats {
+		s := &seat{name: cleanName(ss.Name, fmt.Sprintf("Player %d", i+1)), kind: ss.Kind, aiKind: ss.AIKind}
+		switch ss.Kind {
+		case proto.KindHuman:
+			if r.host == nil {
+				r.host = s
+			}
+		case proto.KindAI:
+		default:
+			return fmt.Errorf("seat %d has unknown kind %q", i, ss.Kind)
+		}
+		r.seats = append(r.seats, s)
+	}
+	if r.host == nil {
+		return errors.New("a saved game needs at least one human seat")
+	}
+	r.settings, r.seed, r.game = f.Settings, f.Seed, g
+	r.phase = proto.PhasePlaying
+	if g.Over() {
+		r.phase = proto.PhaseOver
+	}
+	return nil
+}
+
+func checkTimers(ps proto.Settings) error {
+	switch {
+	case ps.AIDelayMs < 0 || ps.AIDelayMs > 10000:
+		return errors.New("AI delay must be 0 to 10000 ms")
+	case ps.TurnTimerMs < 0 || ps.TurnTimerMs > 3600000:
+		return errors.New("turn timer must be 0 to 1 hour")
+	case ps.DisconnectGraceMs < 0 || ps.DisconnectGraceMs > 600000:
+		return errors.New("disconnect grace must be 0 to 10 minutes")
+	}
+	return nil
+}

@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/fs"
 	"log/slog"
 	"net/http"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/coder/websocket"
 
+	"parallax/internal/proto"
 	"parallax/internal/room"
 )
 
@@ -54,6 +56,8 @@ func New(opts Options) *Server {
 	s := &Server{opts: opts, log: opts.Logger, rooms: room.NewManager(opts.Room), mux: http.NewServeMux()}
 	s.mux.HandleFunc("POST /api/rooms", s.createRoom)
 	s.mux.HandleFunc("GET /api/rooms/{code}", s.getRoom)
+	s.mux.HandleFunc("GET /api/rooms/{code}/save", s.saveRoom)
+	s.mux.HandleFunc("POST /api/load", s.loadRoom)
 	s.mux.HandleFunc("GET /ws", s.websocket)
 	if opts.Static != nil {
 		s.mux.Handle("GET /", http.FileServerFS(opts.Static))
@@ -90,6 +94,44 @@ func (s *Server) getRoom(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"code": rm.Code()})
+}
+
+// saveRoom downloads the game file. The host's token is required, because
+// the actions log reveals every player's orders.
+func (s *Server) saveRoom(w http.ResponseWriter, r *http.Request) {
+	rm, ok := s.rooms.Get(r.PathValue("code"))
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "no such room"})
+		return
+	}
+	f, err := rm.Save(r.URL.Query().Get("token"))
+	switch {
+	case errors.Is(err, room.ErrNotHost):
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": err.Error()})
+		return
+	case err != nil:
+		writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
+		return
+	}
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="parallax-%s-round-%d.json"`,
+		rm.Code(), f.Round))
+	writeJSON(w, http.StatusOK, f)
+}
+
+// loadRoom starts a new room from a game file and returns its code.
+func (s *Server) loadRoom(w http.ResponseWriter, r *http.Request) {
+	var f proto.SaveFile
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<20)).Decode(&f); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "not a game file: " + err.Error()})
+		return
+	}
+	rm, err := s.rooms.Load(&f)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	s.log.Info("room loaded", "room", rm.Code(), "actions", len(f.Actions))
+	writeJSON(w, http.StatusCreated, map[string]string{"code": rm.Code()})
 }
 
 func (s *Server) websocket(w http.ResponseWriter, r *http.Request) {

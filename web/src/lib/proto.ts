@@ -108,6 +108,7 @@ export type ServerMsg =
       seats: SeatInfo[];
       settings: Settings;
       mapPreview: PlanetView[] | null;
+      aiKinds: string[];
     }
   | { type: "your_turn"; round: number; view: View; deadline?: number }
   | { type: "player_turn"; round: number; seat: number; name: string; view: View; deadline?: number }

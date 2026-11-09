@@ -5,6 +5,8 @@
   import type { Settings } from "./proto";
 
   let link = $derived(`${location.origin}/?room=${store.room}`);
+  let aiKind = $state("greedy");
+  const aiNames: Record<string, string> = { greedy: "Greedy (rules)", system1: "System 1 model" };
   let copied = $state(false);
 
   // The host edits a draft; changes go to the server, which validates and
@@ -64,7 +66,7 @@
           <span class="name">{s.name}</span>
           {#if s.seat === store.seat}<span class="badge">you</span>{/if}
           {#if s.seat === store.host}<span class="badge">host</span>{/if}
-          {#if s.kind === "ai"}<span class="badge">computer</span>{/if}
+          {#if s.kind === "ai"}<span class="badge">{s.aiKind === "system1" ? "System 1" : "computer"}</span>{/if}
           {#if !s.connected}<span class="badge warn">away</span>{/if}
           {#if store.isHost && s.seat !== store.host}
             <button class="small" onclick={() => store.send({ type: "remove_seat", seat: s.seat })}>Remove</button>
@@ -75,7 +77,16 @@
 
     {#if store.isHost}
       <div class="actions">
-        <button onclick={() => store.send({ type: "add_ai" })} disabled={store.seats.length >= 9}>Add computer</button>
+        <span class="add-ai">
+          <button onclick={() => store.send({ type: "add_ai", kind: aiKind })} disabled={store.seats.length >= 9}>
+            Add computer
+          </button>
+          {#if store.aiKinds.length > 1}
+            <select bind:value={aiKind} aria-label="Computer player type">
+              {#each store.aiKinds as k (k)}<option value={k}>{aiNames[k] ?? k}</option>{/each}
+            </select>
+          {/if}
+        </span>
         <button onclick={() => store.send({ type: "reroll_map" })}>Reroll map</button>
         <button class="primary" onclick={() => store.send({ type: "start_game" })} disabled={store.seats.length < 2}>
           Start game
@@ -192,6 +203,18 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+  .add-ai {
+    display: flex;
+    gap: 4px;
+  }
+  select {
+    font: inherit;
+    color: inherit;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0 8px;
   }
   .actions {
     display: flex;

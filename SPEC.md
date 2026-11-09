@@ -157,7 +157,7 @@ Client to server:
 
 Server to client:
 - `welcome {seat, token, room}`: also re-sent when a seat number changes after a removal.
-- `lobby {room, phase, host, seats, settings, mapPreview}`: sent on every lobby change, at game start and at game over. `phase` is `lobby`, `playing` or `over`; `mapPreview` (positions and owners only) is sent only in the lobby.
+- `lobby {room, phase, host, seats, settings, mapPreview, aiKinds}`: sent on every lobby change, at game start and at game over. `phase` is `lobby`, `playing` or `over`; `mapPreview` (positions and owners only) is sent only in the lobby. `aiKinds` lists the computer players this server offers (`greedy`, plus `system1` when started with `-system1`).
 - `your_turn {round, view, deadline?}`: sent to the active player.
 - `player_turn {round, seat, name, view, deadline?}`: sent to everyone else, with their own view.
 - `fleet_ack {fleetId, arrivalRound}` / `error {code, message}`
@@ -166,6 +166,8 @@ Server to client:
 - `game_over {winner, standings}`
 
 HTTP: `POST /api/rooms` creates a room and returns `{code}`; `GET /api/rooms/{code}` checks that a room exists. Rooms close after 10 minutes with no human connected.
+
+Save and load: `GET /api/rooms/{code}/save?token=HOST_TOKEN` downloads `{version, seed, round, settings, seats, actions}` (host only, since the actions log reveals every player's orders). `POST /api/load` with that file replays it into a new room and returns `{code}`. Human seats start unclaimed; a player joining without a token takes the seat with their name, or the first free one. The first human seat is the host.
 
 Validate every client message on the server: it's the sender's turn, they own the source planet, they have enough ships, the game is in the right phase, and host-only actions come from the host.
 

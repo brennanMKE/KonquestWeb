@@ -197,3 +197,110 @@ func homeOf(v rules.View) rules.PlanetView {
 	}
 	panic("no planet")
 }
+
+func TestSaveAndLoad(t *testing.T) {
+	ts := newServer(t)
+	code := createRoom(t, ts)
+	alice := dial(t, ts, code)
+	alice.send(&proto.Join{Name: "Alice"})
+	token := expect[proto.Welcome](alice).Token
+	bob := dial(t, ts, code)
+	bob.send(&proto.Join{Name: "Bob"})
+	bobToken := expect[proto.Welcome](bob).Token
+
+	saveURL := ts.URL + "/api/rooms/" + code + "/save?token="
+	if resp, _ := http.Get(saveURL + token); resp.StatusCode != http.StatusConflict {
+		t.Fatalf("save before start: %d", resp.StatusCode)
+	}
+
+	s := proto.DefaultSettings()
+	s.AIDelayMs = 0
+	alice.send(&proto.SetSettings{Settings: s})
+	alice.send(&proto.AddAI{})
+	alice.send(&proto.StartGame{})
+	for range 2 {
+		yt := expect[proto.YourTurn](alice)
+		home := homeOf(yt.View)
+		alice.send(&proto.SendFleet{From: home.ID, To: (home.ID + 1) % len(yt.View.Planets), Ships: 2})
+		expect[proto.FleetAck](alice)
+		alice.send(&proto.EndTurn{})
+		expect[proto.YourTurn](bob)
+		bob.send(&proto.EndTurn{})
+	}
+	before := expect[proto.YourTurn](alice)
+
+	if resp, _ := http.Get(saveURL + bobToken); resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("save by non-host: %d", resp.StatusCode)
+	}
+	resp, err := http.Get(saveURL + token)
+	if err != nil || resp.StatusCode != http.StatusOK {
+		t.Fatalf("save: %v %v", resp, err)
+	}
+	if cd := resp.Header.Get("Content-Disposition"); !strings.Contains(cd, "round-3") {
+		t.Errorf("Content-Disposition %q", cd)
+	}
+	var f proto.SaveFile
+	json.NewDecoder(resp.Body).Decode(&f)
+	resp.Body.Close()
+	if f.Version != proto.SaveVersion || len(f.Seats) != 3 || f.Seats[2].Kind != proto.KindAI || len(f.Actions) == 0 {
+		t.Fatalf("save file: %+v", f)
+	}
+
+	body, _ := json.Marshal(f)
+	resp, err = http.Post(ts.URL+"/api/load", "application/json", strings.NewReader(string(body)))
+	if err != nil || resp.StatusCode != http.StatusCreated {
+		t.Fatalf("load: %v %v", resp, err)
+	}
+	var loaded struct{ Code string }
+	json.NewDecoder(resp.Body).Decode(&loaded)
+	resp.Body.Close()
+
+	// Bob claims his seat by name, Alice takes the remaining one.
+	bob2 := dial(t, ts, loaded.Code)
+	bob2.send(&proto.Join{Name: "bob"})
+	if w := expect[proto.Welcome](bob2); w.Seat != 1 || w.Token == "" {
+		t.Fatalf("bob's seat: %+v", w)
+	}
+	alice2 := dial(t, ts, loaded.Code)
+	alice2.send(&proto.Join{Name: "Someone"})
+	if w := expect[proto.Welcome](alice2); w.Seat != 0 {
+		t.Fatalf("alice's seat: %+v", w)
+	}
+	if l := expect[proto.Lobby](alice2); l.Host != 0 || l.Phase != proto.PhasePlaying {
+		t.Fatalf("lobby: %+v", l)
+	}
+	after := expect[proto.YourTurn](alice2)
+	if after.Round != before.Round || len(after.View.Fleets) != len(before.View.Fleets) {
+		t.Fatalf("loaded game differs: round %d vs %d", after.Round, before.Round)
+	}
+	for i := range before.View.Planets {
+		a, b := before.View.Planets[i], after.View.Planets[i]
+		if a.Owner != b.Owner || (a.Ships == nil) != (b.Ships == nil) || (a.Ships != nil && *a.Ships != *b.Ships) {
+			t.Fatalf("planet %d differs: %+v vs %+v", i, a, b)
+		}
+	}
+	// Nobody else can join: every seat is claimed.
+	eve := dial(t, ts, loaded.Code)
+	eve.send(&proto.Join{Name: "Eve"})
+	if e := expect[proto.Error](eve); e.Code != proto.ErrWrongPhase {
+		t.Fatalf("eve: %+v", e)
+	}
+}
+
+func TestLoadRejectsBadFiles(t *testing.T) {
+	ts := newServer(t)
+	for _, body := range []string{
+		`not json`,
+		`{"version": 99}`,
+		`{"version": 1, "seed": 1, "settings": {"width": 16, "height": 16, "depth": 1, "neutrals": 10, "shipSpeed": 2},
+		  "seats": [{"name": "A", "kind": "ai"}, {"name": "B", "kind": "ai"}], "actions": []}`,
+		`{"version": 1, "seed": 1, "settings": {"width": 16, "height": 16, "depth": 1, "neutrals": 10, "shipSpeed": 2},
+		  "seats": [{"name": "A", "kind": "human"}, {"name": "B", "kind": "ai"}], "actions": [{"kind": "end_turn", "seat": 1}]}`,
+	} {
+		resp, err := http.Post(ts.URL+"/api/load", "application/json", strings.NewReader(body))
+		if err != nil || resp.StatusCode != http.StatusBadRequest {
+			t.Errorf("%.40s: %v %v", body, resp.StatusCode, err)
+		}
+		resp.Body.Close()
+	}
+}

@@ -47,6 +47,8 @@ class Store {
   seats = $state<SeatInfo[]>([]);
   settings = $state<Settings | null>(null);
   mapPreview = $state<PlanetView[] | null>(null);
+  aiKinds = $state<string[]>(["greedy"]);
+  token = $state("");
   view = $state<View | null>(null);
   round = $state(0);
   active = $state(-1);
@@ -128,6 +130,7 @@ class Store {
     switch (m.type) {
       case "welcome":
         this.seat = m.seat;
+        this.token = m.token;
         save(tokenKey(m.room), m.token);
         break;
       case "lobby":
@@ -136,6 +139,7 @@ class Store {
         this.seats = m.seats;
         this.settings = m.settings;
         this.mapPreview = m.mapPreview;
+        this.aiKinds = m.aiKinds;
         break;
       case "your_turn":
         this.view = m.view;

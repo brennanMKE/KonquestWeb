@@ -37,7 +37,10 @@ const (
 )
 
 // AI kinds.
-const AIGreedy = "greedy"
+const (
+	AIGreedy  = "greedy"
+	AISystem1 = "system1"
+)
 
 // Phases of a room.
 const (
@@ -115,6 +118,8 @@ type Lobby struct {
 	Seats      []SeatInfo         `json:"seats"`
 	Settings   Settings           `json:"settings"`
 	MapPreview []rules.PlanetView `json:"mapPreview"`
+	// AIKinds are the computer players this server offers.
+	AIKinds []string `json:"aiKinds"`
 }
 type YourTurn struct {
 	Round int        `json:"round"`
@@ -226,4 +231,25 @@ func Decode(data []byte) (any, error) {
 		return nil, err
 	}
 	return msg, nil
+}
+
+// SaveVersion is the current game file format.
+const SaveVersion = 1
+
+// SaveFile is a saved game: enough to replay it exactly.
+type SaveFile struct {
+	Version int    `json:"version"`
+	Seed    uint64 `json:"seed"`
+	// Round is the round the game was saved in, for information only.
+	Round    int            `json:"round"`
+	Settings Settings       `json:"settings"`
+	Seats    []SavedSeat    `json:"seats"`
+	Actions  []rules.Action `json:"actions"`
+}
+
+// SavedSeat is one seat in a saved game.
+type SavedSeat struct {
+	Name   string `json:"name"`
+	Kind   string `json:"kind"`
+	AIKind string `json:"aiKind,omitempty"`
 }

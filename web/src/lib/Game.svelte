@@ -1,28 +1,19 @@
 <script lang="ts">
   import { load, save, store } from "./store.svelte";
-  import { play, setSound, soundOn, unlockAudio } from "./audio";
+  import { setSound, soundOn, unlockAudio } from "./audio";
   import { ownerColor } from "./colors";
-  import { distance, travelTurns } from "./proto";
+  import { orders } from "./orders.svelte";
+  import { popOut, type Popout } from "./popout";
   import Board from "./Board.svelte";
-  import FleetList from "./FleetList.svelte";
-  import Standings from "./Standings.svelte";
+  import Controls from "./Controls.svelte";
 
   let view = $derived(store.view!);
   let settings = $derived(view.settings);
 
-  // Order entry: pick a source you own, then a destination, then a count.
-  let source = $state<number | null>(null);
-  let dest = $state<number | null>(null);
-  let ships = $state(0);
-  let hover = $state<number | null>(null);
-  let shipInput = $state<HTMLInputElement | null>(null);
-
-  // Measure tool: pick two planets to see the distance and travel time.
-  let measuring = $state(false);
-  let measureA = $state<number | null>(null);
-  let measureB = $state<number | null>(null);
-
-  let tab = $state<"log" | "fleets" | "standings">("log");
+  // A new game starts with no half-entered orders.
+  orders.cancel();
+  orders.measuring = false;
+  orders.hover = null;
 
   // The 3D view loads three.js on first use; the choice is remembered.
   // Deep maps open in 3D unless this browser chose the map view.
@@ -47,6 +38,28 @@
     if (!store.replays && store.replayPending) store.replayDone();
   });
 
+  // Full page: the board alone fills the window, ready for the system's full
+  // screen. Esc returns to the usual layout.
+  let fullPage = $state(false);
+  let fullHint = $state(false);
+  function enterFullPage() {
+    fullPage = true;
+    fullHint = true;
+    setTimeout(() => (fullHint = false), 3000);
+  }
+
+  // The controls and log can move to a window of their own.
+  let popout = $state<Popout | null>(null);
+  function togglePopout() {
+    if (popout) {
+      popout.close();
+      return;
+    }
+    popout = popOut(store.room, () => (popout = null));
+    if (!popout) store.showToast("The browser blocked the window. Allow pop-ups for this site and try again.");
+  }
+  $effect(() => () => popout?.close());
+
   // Turn timer countdown.
   let now = $state(Date.now());
   $effect(() => {
@@ -55,74 +68,10 @@
   });
   let secondsLeft = $derived(store.deadline ? Math.max(0, Math.ceil((store.deadline - now) / 1000)) : null);
 
-  let srcPlanet = $derived(source !== null ? view.planets[source] : null);
-  let dstPlanet = $derived(dest !== null ? view.planets[dest] : null);
-  let infoPlanet = $derived(hover !== null ? view.planets[hover] : (dstPlanet ?? srcPlanet));
-
   // A finished turn or a new view drops any half-entered order.
   $effect(() => {
-    if (!store.myTurn) cancel();
+    if (!store.myTurn) orders.cancel();
   });
-
-  function cancel() {
-    source = null;
-    dest = null;
-  }
-
-  function toggleMeasure() {
-    measuring = !measuring;
-    measureA = measureB = null;
-  }
-
-  function pick(id: number) {
-    if (measuring) {
-      if (measureA === null || measureB !== null) {
-        measureA = id;
-        measureB = null;
-      } else if (id !== measureA) {
-        measureB = id;
-      }
-      return;
-    }
-    if (!store.myTurn) return;
-    const p = view.planets[id];
-    if (source === null || dest !== null) {
-      if (p.owner === store.seat && (p.ships ?? 0) > 0) {
-        source = id;
-        dest = null;
-      } else if (p.owner === store.seat) {
-        store.showToast(`${p.name} has no ships to send.`);
-      } else {
-        store.showToast("Pick one of your own planets first.");
-      }
-      return;
-    }
-    if (id === source) {
-      cancel();
-      return;
-    }
-    dest = id;
-    ships = srcPlanet?.ships ?? 0;
-    queueMicrotask(() => shipInput?.select());
-  }
-
-  function confirm(e: SubmitEvent) {
-    e.preventDefault();
-    if (source === null || dest === null) return;
-    const n = Math.floor(ships);
-    if (!(n >= 1 && n <= (srcPlanet?.ships ?? 0))) {
-      store.showToast(`Send 1 to ${srcPlanet?.ships ?? 0} ships.`);
-      return;
-    }
-    store.send({ type: "send_fleet", from: source, to: dest, ships: n });
-    cancel();
-  }
-
-  function endTurn() {
-    cancel();
-    play("end");
-    store.send({ type: "end_turn" });
-  }
 
   let sound = $state(soundOn());
   function toggleSound() {
@@ -130,39 +79,21 @@
     setSound(sound);
   }
 
-  // Keyboard: planet letters pick planets, Esc cancels, as in the original.
+  // Keyboard: planet letters pick planets. Esc skips a battle replay (the 3D
+  // board handles that), else cancels an order, else leaves the full page.
   function onkey(e: KeyboardEvent) {
     unlockAudio();
-    if (e.key === "Escape") {
-      if (measuring) toggleMeasure();
-      else cancel();
-      return;
-    }
-    const target = e.target as HTMLElement;
-    if (target.tagName === "INPUT" || e.metaKey || e.ctrlKey || e.altKey) return;
-    if (/^[a-z]$/i.test(e.key)) {
-      const p = view.planets.find((p) => p.letter === e.key.toUpperCase());
-      if (p) pick(p.id);
-    }
+    if (e.key === "Escape" && store.replayPending) return;
+    if (orders.key(e)) return;
+    if (e.key === "Escape" && fullPage) fullPage = false;
   }
 
   let activeName = $derived(store.active >= 0 ? store.playerName(store.active) : "");
-  let alive = $derived(view.players[store.seat]?.alive ?? false);
-
-  function stat(v: number | undefined, digits = 0) {
-    return v === undefined ? "?" : digits ? v.toFixed(digits) : String(v);
-  }
-
-  let logEl = $state<HTMLElement | null>(null);
-  $effect(() => {
-    void store.log.length;
-    logEl?.scrollTo({ top: logEl.scrollHeight });
-  });
 </script>
 
 <svelte:window onkeydown={onkey} onpointerdown={unlockAudio} />
 
-<div class="game">
+<div class="game" class:full={fullPage}>
   <header>
     <strong>Parallax</strong>
     <span class="muted">Room {store.room}</span>
@@ -214,10 +145,10 @@
           seat={store.seat}
           fleets={view.fleets}
           round={view.round}
-          source={measuring ? measureA : source}
-          dest={measuring ? measureB : dest}
-          onpick={pick}
-          onhover={(id) => (hover = id)}
+          source={orders.measuring ? orders.measureA : orders.source}
+          dest={orders.measuring ? orders.measureB : orders.dest}
+          onpick={orders.pick}
+          onhover={(id) => (orders.hover = id)}
           replay={replays ? store.lastEvents : null}
           onreplaydone={(round) => store.replayDone(round)}
         />
@@ -242,124 +173,28 @@
             Replays {replays ? "on" : "off"}
           </button>
         {/if}
+        {#if !fullPage}
+          <button class="small" onclick={enterFullPage} title="Show only the map, ready for full screen. Esc to return.">Fill page</button>
+        {/if}
+        <button class="small" onclick={togglePopout} aria-pressed={!!popout} title="Move the controls and log to their own window">
+          {popout ? "Put controls back" : "Pop out controls"}
+        </button>
       </div>
+      {#if fullPage && fullHint}
+        <div class="full-hint">Press Esc to return</div>
+      {/if}
     </div>
 
-    <aside>
-      <section class="orders">
-        {#if store.phase === "over"}
-          <p>The game is over.</p>
-        {:else if store.watching}
-          <p>You're watching. {activeName} is moving.</p>
-          <p class="hint">Drag to turn the map. Each round's battles replay in 3D.</p>
-        {:else if !alive}
-          <p class="muted">You've been eliminated. You can keep watching.</p>
-        {:else if !store.myTurn}
-          <p class="muted">Waiting for {activeName}. You can look around the map.</p>
-        {:else if srcPlanet && dstPlanet}
-          <form onsubmit={confirm}>
-            <p>
-              From <b>{srcPlanet.name}</b> to <b>{dstPlanet.name}</b>,
-              {travelTurns(srcPlanet.pos, dstPlanet.pos, settings.shipSpeed)} rounds
-            </p>
-            <div class="row">
-              <input
-                bind:this={shipInput}
-                type="number"
-                min="1"
-                max={srcPlanet.ships}
-                bind:value={ships}
-                aria-label="Ships to send"
-              />
-              <span class="muted">of {srcPlanet.ships}</span>
-              <button class="primary">Send</button>
-              <button type="button" onclick={cancel}>Cancel</button>
-            </div>
-            <p class="hint">Enter to send, Esc to cancel. Orders are final.</p>
-          </form>
-        {:else if srcPlanet}
-          <p>Sending from <b>{srcPlanet.name}</b> ({srcPlanet.ships} ships). Pick a destination.</p>
-          <p class="hint">Click the planet or type its letter. Esc cancels.</p>
-        {:else}
-          <p>Pick one of your planets to send a fleet from.</p>
-        {/if}
-        {#if store.myTurn}
-          <button class="primary end" onclick={endTurn}>End turn</button>
-        {/if}
-        <button class="measure" class:on={measuring} onclick={toggleMeasure}>
-          {measuring ? "Stop measuring" : "Measure distance"}
-        </button>
-      </section>
-
-      {#if measuring}
-        <section class="measuring">
-          {#if measureA !== null && measureB !== null}
-            {@const a = view.planets[measureA]}
-            {@const b = view.planets[measureB]}
-            <p>
-              <b>{a.name}</b> to <b>{b.name}</b>: {distance(a.pos, b.pos).toFixed(1)} cells,
-              <b>{travelTurns(a.pos, b.pos, settings.shipSpeed)}</b> rounds
-            </p>
-          {:else if measureA !== null}
-            <p>From <b>{view.planets[measureA].name}</b>. Pick a second planet.</p>
-          {:else}
-            <p>Pick two planets to measure.</p>
-          {/if}
-        </section>
-      {/if}
-
-      <section class="info">
-        {#if infoPlanet}
-          <h3>
-            <span class="dot" style:background={ownerColor(infoPlanet.owner)}></span>
-            {infoPlanet.name}
-            {#if infoPlanet.letter}<span class="key" title="Type this letter to pick it">{infoPlanet.letter}</span>{/if}
-          </h3>
-          <dl>
-            <dt>Owner</dt>
-            <dd>{store.seatName(infoPlanet.owner)}</dd>
-            <dt>Ships</dt>
-            <dd>{stat(infoPlanet.ships)}</dd>
-            <dt>Production</dt>
-            <dd>{stat(infoPlanet.production)}</dd>
-            <dt>Kill rate</dt>
-            <dd>{stat(infoPlanet.kill, 2)}</dd>
-            <dt>Position</dt>
-            <dd>
-              {infoPlanet.pos.x}, {infoPlanet.pos.y}{settings.depth > 1 ? `, ${infoPlanet.pos.z}` : ""}
-            </dd>
-            {#if srcPlanet && infoPlanet.id !== srcPlanet.id}
-              <dt>From {srcPlanet.name}</dt>
-              <dd>
-                {distance(srcPlanet.pos, infoPlanet.pos).toFixed(1)} cells,
-                {travelTurns(srcPlanet.pos, infoPlanet.pos, settings.shipSpeed)} rounds
-              </dd>
-            {/if}
-          </dl>
-        {:else}
-          <p class="muted">Hover a planet for details.</p>
-        {/if}
-      </section>
-
-      <nav class="tabs" aria-label="Panels">
-        <button class:on={tab === "log"} onclick={() => (tab = "log")}>Log</button>
-        <button class:on={tab === "fleets"} onclick={() => (tab = "fleets")}>Fleets ({view.fleets.length})</button>
-        <button class:on={tab === "standings"} onclick={() => (tab = "standings")}>Standings</button>
-      </nav>
-      <section class="log" bind:this={logEl}>
-        {#if tab === "fleets"}
-          <FleetList {view} />
-        {:else if tab === "standings"}
-          <Standings {view} seats={store.seats} />
-        {:else}
-          {#each store.log as entry (entry.id)}
-            <p class={entry.tone}><span class="r">{entry.round}</span>{entry.text}</p>
-          {:else}
-            <p class="muted">Battle reports appear here.</p>
-          {/each}
-        {/if}
-      </section>
-    </aside>
+    {#if !popout}
+      <aside>
+        <Controls />
+      </aside>
+    {:else if !fullPage}
+      <aside class="away">
+        <p class="muted">The controls are in their own window.</p>
+        <button onclick={togglePopout}>Put them back</button>
+      </aside>
+    {/if}
   </main>
 
   {#if store.standings && !store.replayPending}
@@ -480,45 +315,44 @@
       border-top: 1px solid var(--border);
     }
   }
-  aside section {
-    padding: 12px 16px;
-    border-bottom: 1px solid var(--border);
-  }
-  aside p {
-    margin: 0 0 8px;
-  }
-  .row {
-    display: flex;
+  .away {
+    padding: 16px;
     gap: 8px;
-    align-items: center;
   }
-  .row input {
-    width: 80px;
+  .away p {
+    margin: 0;
   }
-  .hint {
-    font-size: 12px;
-    color: var(--muted);
-    margin-top: 8px;
+  /* Full page: only the board, edge to edge. */
+  .game.full header {
+    display: none;
   }
-  .end,
-  .measure {
-    width: 100%;
-    margin-top: 8px;
+  .game.full aside {
+    display: none;
   }
-  .measure.on,
-  .tabs button.on {
-    border-color: var(--accent);
-    color: var(--accent);
+  .game.full .board-wrap {
+    padding: 0;
   }
-  .tabs {
-    display: flex;
-    gap: 4px;
-    padding: 8px 16px 0;
+  .game.full .view-toggle {
+    top: 8px;
+    left: 8px;
+    opacity: 0;
+    transition: opacity 0.3s;
   }
-  .tabs button {
-    flex: 1;
-    padding: 4px 6px;
-    font-size: 13px;
+  .game.full .board-wrap:hover .view-toggle,
+  .game.full .view-toggle:focus-within {
+    opacity: 0.85;
+  }
+  .full-hint {
+    position: absolute;
+    z-index: 2;
+    top: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgb(0 0 0 / 0.6);
+    padding: 6px 14px;
+    border-radius: 6px;
+    font-size: 14px;
+    pointer-events: none;
   }
   .save {
     color: var(--accent);
@@ -529,54 +363,6 @@
     font-weight: 600;
   }
   .timer.low {
-    color: var(--bad);
-  }
-  .key {
-    font-size: 11px;
-    font-weight: 600;
-    padding: 1px 5px;
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    color: var(--muted);
-  }
-  .info h3 {
-    margin: 0 0 8px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-  dl {
-    display: grid;
-    grid-template-columns: auto 1fr;
-    gap: 2px 12px;
-    margin: 0;
-    font-size: 14px;
-  }
-  dt {
-    color: var(--muted);
-  }
-  dd {
-    margin: 0;
-  }
-  .log {
-    flex: 1;
-    overflow-y: auto;
-    font-size: 13px;
-    border-bottom: none !important;
-  }
-  .log p {
-    margin: 0 0 6px;
-    line-height: 1.35;
-  }
-  .log .r {
-    display: inline-block;
-    min-width: 24px;
-    color: var(--muted);
-  }
-  .log .good {
-    color: var(--good);
-  }
-  .log .bad {
     color: var(--bad);
   }
   .over {

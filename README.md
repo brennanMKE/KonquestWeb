@@ -111,6 +111,17 @@ In the lobby, add three computers, tick **Watch only**, and start. The computer 
 so you can follow each move (set it higher if you like). With no human playing you see everything:
 every fleet, every planet's stats and every battle, replayed in 3D each round.
 
+## Two screens
+
+**Fill page** (top left of the board) shows only the map, edge to edge, ready for the system's full screen
+(on a Mac, the green button or Ctrl-Cmd-F). Esc returns to the usual layout; during a battle replay, Esc
+skips the replay first.
+
+**Pop out controls** moves the orders, planet details and log into a window of their own. Put the game on
+a second screen in full screen, keep the controls on the main screen, and click planets on either the map
+or type their letters in the controls window. **Put back in the game**, or closing the window, docks them
+again.
+
 ## Architecture
 
 | Path | What |

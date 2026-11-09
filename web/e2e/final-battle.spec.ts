@@ -20,7 +20,8 @@ test("the final scores wait for the last round's battle replay", async ({ page }
   // Until the scores appear, never show them over a running replay.
   const scores = page.getByRole("button", { name: "Back to the map" });
   const replaying = page.getByText("Replaying battles");
-  const deadline = Date.now() + 90_000;
+  // Leave 30 s of the test timeout for the checks below.
+  const deadline = Date.now() + test.info().timeout - 30_000;
   while (!(await scores.isVisible())) {
     expect(Date.now()).toBeLessThan(deadline);
     await page.waitForTimeout(100);

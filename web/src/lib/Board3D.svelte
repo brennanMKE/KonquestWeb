@@ -333,6 +333,21 @@
     return flyTo(at.clone().add(dir.multiplyScalar(Math.max(12, span() * 0.45))), at, camera.up, dur);
   }
 
+  // Frame several planets at once: look at their middle from the current
+  // direction, backed out just far enough that all of them fit on screen.
+  function frameAll(ids: number[], dur = 800) {
+    if (ids.length === 1) return focusOn(ids[0], dur);
+    const points = ids.map((id) => toWorld(planets[id]));
+    const box = new THREE.Box3().setFromPoints(points);
+    const center = box.getCenter(new THREE.Vector3());
+    const radius = Math.max(...points.map((p) => p.distanceTo(center))) + 2 * unit;
+    const vfov = THREE.MathUtils.degToRad(camera.fov);
+    const hfov = 2 * Math.atan(Math.tan(vfov / 2) * camera.aspect);
+    const dist = Math.max(12, (radius / Math.sin(Math.min(vfov, hfov) / 2)) * 1.1);
+    const dir = camera.position.clone().sub(controls.target).normalize();
+    return flyTo(center.clone().add(dir.multiplyScalar(dist)), center, camera.up, dur);
+  }
+
   // Arrivals: planets where our fleets land at the end of this round.
   let arrivals = $derived([
     ...new Set(fleets.filter((f) => f.owner === seat && f.arrivalRound <= round).map((f) => f.to)),
@@ -394,9 +409,11 @@
     for (const e of all) if (!before.has(e.planet)) before.set(e.planet, e.defender);
     shownOwner = before;
     const home = { pos: camera.position.clone(), target: controls.target.clone(), up: camera.up.clone() };
+    // One camera move for the whole round: frame every battle, then play
+    // them in place, in the order they happened.
+    await frameAll([...new Set(battles.map((e) => e.planet))]);
     for (const e of battles) {
       if (skip) break;
-      await focusOn(e.planet, 650);
       await battle(e);
     }
     lastInput = performance.now(); // a lull starts after the replay

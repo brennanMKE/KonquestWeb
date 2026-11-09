@@ -157,6 +157,8 @@ class Store {
   }
 
   private addLog(round: number, text: string, tone: LogEntry["tone"] = "info") {
+    // A watcher has no side, so nothing is good or bad news.
+    if (this.watching) tone = "info";
     this.log.push({ id: this.logId++, round, text, tone });
   }
 

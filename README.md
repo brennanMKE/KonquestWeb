@@ -6,7 +6,13 @@ see, and turns resolve on an authoritative Go server over WebSockets.
 
 The name nods to stellar parallax, the way astronomers measure the distance to stars.
 
-**Status:** planning. See [SPEC.md](SPEC.md) for the design and milestones.
+**Status:** milestone 1 (rules engine). See [SPEC.md](SPEC.md) for the design and milestones, and
+[RULES.md](RULES.md) for the exact rules.
+
+```sh
+make test                          # rules and AI tests
+make sim ARGS="-seed 7 -depth 4"   # a seeded AI-vs-AI game on a 3D map, with its turn log
+```
 
 ## How it plays
 
@@ -44,10 +50,11 @@ A simple rule-based player is planned as well, so games work without a model run
 
 | Path | What |
 |---|---|
-| `internal/rules` | pure, deterministic game engine: state + orders + seed → state + events |
+| `internal/rules` | pure, deterministic game engine: map, turns, combat, views, standings, replay |
 | `internal/room` | lobby, seats, settings, turn lifecycle, timers (one goroutine per room) |
 | `internal/ai` | computer players: System 1 advisor and a rule-based fallback |
 | `internal/proto` | WebSocket message types |
+| `cmd/sim` | plays a seeded game between computer players and prints the log |
 | `cmd/server` | single binary with the frontend embedded |
 | `web/` | TypeScript + Vite + Svelte client, board drawn in SVG |
 

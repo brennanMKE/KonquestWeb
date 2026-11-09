@@ -1,15 +1,20 @@
 # Parallax: Spec for Claude Code
 
-A browser-based, real-time multiplayer remake of KDE Konquest (originally GNU-Lactic Konquest). Players join a room from any browser, each sees only what their empire would see, and turns resolve on the server over WebSockets.
+A browser-based, real-time multiplayer space strategy game in the style of KDE Konquest (originally GNU-Lactic Konquest). Players join a room from any browser, each sees only what their empire would see, and turns resolve on the server over WebSockets.
 
 Name: **Parallax**. Go module path: `parallax`.
 
+## Clean-room rule
+
+Parallax is MIT licensed. Konquest is GPL. **Never read, copy or translate Konquest source code** (`game.cpp`, `planet.h`, `src/players/ai/` and so on), and don't fetch it for reference. Rules come from the public handbook, from playing the original, and from our own design. Where those leave a gap, we pick a house rule and document it in [`RULES.md`](RULES.md). `RULES.md` is the source of truth for game rules; this spec describes intent.
+
 ## Goals
 
-- Faithful to Konquest's rules and feel: grid of planets, ship production, kill percentage, fleets that take turns to arrive, no mid-flight combat.
+- The feel of Konquest: planets with production and kill percentage, fleets that take turns to arrive and can't be recalled, no fighting in flight.
 - Real online multiplayer. Each player plays from their own device, so hidden information actually works (the original is hot-seat only).
+- Depth: maps can be 3D (see "3D maps").
 - One self-hosted binary. Runs on a Mac mini, Pi, or small VPS, reachable over Tailscale or the public internet.
-- Computer players to fill empty seats.
+- Computer players to fill empty seats, driven by a System 1 decision model with a rule-based fallback.
 
 ## Non-goals (v1)
 
@@ -18,75 +23,66 @@ Name: **Parallax**. Go module path: `parallax`.
 - Mobile-first layout. It should be usable on an iPad, but desktop is the target.
 - Chat (players will be on Discord or in the same room).
 
-## Rules (match the original)
-
-Source of truth: the Konquest handbook and `game.cpp` / `planet.h` in the KDE source (sources.debian.org/src/konquest or lxr.kde.org/source/games/konquest). Before implementing the rules engine, read the current upstream `game.cpp` and confirm the numbers below. Where upstream differs, follow upstream and note it in `RULES.md`.
+## Rules (summary; details and numbers in RULES.md)
 
 ### Board
 
-- Rectangular grid (default 16x16, configurable). Planets sit on cells; most cells are empty space.
-- Planets are named A, B, C... in order.
-- Map generator places N planets (default: players + 10 neutrals), with home planets spread apart. "Reroll map" button in the lobby.
+- A grid of cells, width × height × depth (default 16 × 16 × 1, i.e. flat). Planets sit on cells; most cells are empty space.
+- Planets are named A, B, C... after the map is shuffled, so names don't reveal home planets.
+- The map generator places players + N neutral planets (default 10), with home planets spread apart. "Reroll map" button in the lobby.
 
 ### Planets
 
-- **Production**: ships built per turn. Neutrals get 5 to 15 (upstream `generatePlanetProduction`). Fixed for the life of the planet.
-- **Kill percentage**: 0.30 to 0.90 for neutrals (upstream `generateKillPercentage`). Fixed for the life of the planet.
-- **Home planets**: production 10, kill percentage 0.40. One per player.
-- **Neutral planets**: start with ships equal to their production, but only build 1 ship per turn while neutral. Confirm against upstream.
-- Options from the original's new-game dialog (implement as room settings):
-  - Cumulative production (unspent production carries over vs. not). Confirm semantics in upstream.
-  - Production after capture (a just-captured planet produces on the next turn vs. waits a turn).
-  - Blind map (hide enemy and neutral ship counts / stats).
-  - Neutral planets visible stats on/off.
-  - Max turns (0 = unlimited).
+- **Production**: ships built per round. Home planets 10; neutrals 5 to 15. Fixed for the life of the planet.
+- **Kill percentage**: chance that one of this planet's ships destroys an enemy ship in one exchange. Home planets 0.40; neutrals 0.30 to 0.90. Fixed for the life of the planet.
+- Planets start with ships equal to their production. Neutral planets grow by only 1 ship per round.
+- Room options:
+  - Capture production: a just-captured planet produces in the round it's captured, or waits a round (default).
+  - Blind map: hide ships, production and kill percentage of planets you don't own.
+  - Neutral stats visible on/off.
+  - Max rounds (0 = unlimited).
+  - Ship speed (cells per round; default 2).
+  - Map size and depth.
 
 ### Fleets
 
-- A player orders N ships from one of their planets to any other planet. Ships leave immediately and cannot be recalled or redirected.
-- Travel time in turns comes from the Euclidean distance between cells. Get the exact formula (distance scale and rounding) from upstream `game.cpp` and use it unchanged.
+- A player sends N ships from one of their planets to any other planet. Ships leave immediately and can't be recalled or redirected.
+- Travel time in rounds is the Euclidean distance between cells (in 3D) divided by ship speed, rounded up, minimum 1.
 - Fleets never fight each other in flight.
-- Fleet arriving at an own planet: ships are added to the planet's defense ("Reinforcements have arrived").
-- Fleet arriving at an enemy or neutral planet: combat.
+- A fleet arriving at its owner's planet reinforces it. A fleet arriving anywhere else fights.
+- A fleet fights with the kill percentage of the planet it was launched from.
 
-### Combat (port of upstream logic)
+### Combat
 
-Attackers use the kill percentage of their **source** planet. Defenders use the kill percentage of the planet being defended. Loop until one side has 0 ships:
+Exchanges repeat until one side has no ships. In each exchange the defender fires first, then the attacker. If the planet falls, it changes owner and the surviving attackers become its garrison. Exact rule in `RULES.md`.
 
-```
-loop:
-  aRoll = rand01(); dRoll = rand01()
-  if both kill percentages are 0:
-      if aRoll < dRoll: defender loses 1 ship  else: attacker loses 1 ship
-  else:
-      if dRoll < defenderKill: attacker loses 1 ship
-      if attacker == 0: planet holds; break
-      if aRoll < attackerKill: defender loses 1 ship
-      if defender == 0: planet falls; break
-```
-
-- If the planet falls, ownership changes and the surviving attacking ships become its defense.
-- Track per-player stats (ships built, ships destroyed, ships lost, planets conquered, fleets launched) for the standings screen, as the original does.
-- Confirm the order of the defender and attacker rolls and the zero-kill special case against upstream before shipping.
-
-### Turn resolution order
-
-Match upstream's order for: production, fleet arrival, multiple fleets arriving at one planet in the same turn (resolve one at a time in a deterministic order), and capture. Document it in `RULES.md`.
+Track per-player stats (ships built, ships destroyed, ships lost, planets conquered, fleets launched) for the standings screen.
 
 ### Elimination and victory
 
 - A player is out when they own no planets and have no fleets in flight.
-- Last player standing wins. If max turns is reached, rank by upstream's standings rule (planets, then ships), and note which one in `RULES.md`.
+- Last player standing wins. If max rounds is reached, rank by planets, then total ships.
 
-## Turn model (same as KDE)
+## 3D maps
 
-Players take turns one at a time in seat order, exactly like the original. The only difference is that each player is on their own device, and WebSockets tell everyone whose turn it is.
+Distance is the core skill in this game, so depth has to stay readable.
+
+- **Engine:** 3D from day one. Every planet has (x, y, z), and travel uses 3D distance. A flat map is depth 1 (z = 0). This costs almost nothing.
+- **Client v1:** the flat SVG board. For depth > 1 maps, show each planet's height as a label or a stalk/shadow (a 2.5D view), which keeps clicking and iPad play easy.
+- **Later:** a "3D map" room option with shallow volumes (e.g. 16 × 16 × 4) first. A full three.js view with camera controls only if playtests show the extra fronts are fun rather than chaotic.
+- The measure-distance tool matters more in 3D. Show turns for any pair of planets.
+
+## Turn model
+
+Players take turns one at a time in seat order, like the original. Each player is on their own device, and WebSockets tell everyone whose turn it is.
 
 1. A round starts. The server picks the first living player in seat order and sends them `your_turn` with their view of the state. Everyone else gets `player_turn {seat}` and sees "Alice is moving."
-2. The active player gives fleet orders one at a time (source, destination, ship count). As in the original, an order is final once confirmed: ships leave the source immediately and the order can't be cancelled. Esc cancels an order only while it's being entered.
+2. The active player gives fleet orders one at a time (source, destination, ship count). An order is final once confirmed: ships leave the source immediately and the order can't be cancelled. Esc cancels an order only while it's being entered.
 3. The active player clicks **End Turn**. The server moves to the next living player in seat order and signals everyone again.
-4. Computer players take their turn when their seat comes up. The server runs the AI, then advances. Add a short configurable delay (default 1 second) so humans can follow along.
-5. After the last player in the round ends their turn, the server resolves the round (production, fleet arrivals, combat, captures) in upstream's order, sends each player their filtered `round_result`, and starts the next round with the first seat.
+4. Computer players take their turn when their seat comes up. The server runs the AI, then advances, with a short configurable delay (default 1 second) so humans can follow along.
+5. After the last player in the round ends their turn, the server resolves the round (arrivals, combat, captures, production) as described in `RULES.md`, sends each player their filtered `round_result`, and starts the next round with the first seat.
+
+Turn order lives in the rules engine (`internal/rules`), so the actions log alone replays a game.
 
 Waiting players:
 - Can see the board and hover their own planets and fleets, but can't give orders. The server rejects orders from anyone who isn't the active player.
@@ -96,7 +92,18 @@ Timeouts (room settings, all off by default):
 - Turn timer: if the active player doesn't end their turn in time, the server ends it for them, keeping any orders they already gave.
 - Disconnect: if the active player disconnects, the server waits for a reconnect grace period, then skips their turn. The host can also switch a disconnected seat to an AI.
 
-Confirm against upstream `game.cpp` that fleets launched during a round are only resolved at the end of the round (after the last player moves), and match it.
+## Computer players
+
+Computer players follow the approach from [System 1 Arcade](https://github.com/brennanMKE/System1Arcade): a System 1 decision model such as [Laya](https://huggingface.co/convaiinnovations/laya) answers typed questions about short plain-English states with calibrated probabilities, and the game's own strategy code turns those answers into orders.
+
+- **The game does the arithmetic; the model judges.** Laya can't count or compare numbers. Each prompt gives conclusions in words: "Planet D is 3 rounds away. It will have about 14 defenders when our fleet arrives, and we can send 30 ships with a weaker kill rate. Is attacking D now a good idea? yes / no".
+- **One short state per question**, sent as a batch per decision.
+- **Options repeat the state's own words.**
+- **Strategy lives in code.** An advisor asks about candidate attacks, threats to own planets and reinforcement needs, then `Decide` turns the answers into fleet orders.
+- **Oracle.** Every question has a correct answer computed from the true game state (e.g. by simulating the battle many times), so decision quality can be measured, as in System1Arcade.
+- **Endpoint.** Same HTTP shape as System1Arcade: `POST {state, questions}` or `{batch}` → `{answers}`, with an optional Bearer token. The server can run Laya locally or call a custom endpoint.
+- **Fallback.** A rule-based player (`Greedy`) works with no model running, and is the baseline to beat.
+- AI players see only their own per-player view, never the full state.
 
 ## Architecture
 
@@ -105,22 +112,23 @@ The server is authoritative. Clients only send intents and render what they're t
 ### Server: Go
 
 - Single binary with the built frontend embedded via `embed`.
-- WebSockets: `github.com/coder/websocket` (maintained successor to nhooyr/websocket).
+- WebSockets: `github.com/coder/websocket`.
 - Packages:
-  - `internal/rules`: pure, deterministic game engine. No I/O. Takes `State + Orders + RNG seed` and returns `State + Events`. Most of the tests go here.
+  - `internal/rules`: pure, deterministic game engine. No I/O. Map generation, turn order, orders, round resolution, per-player views, standings. Most of the tests go here.
   - `internal/room`: lobby, seats, settings, turn lifecycle, timers. One goroutine per room owns its state (actor pattern: no shared mutexes on game state).
-  - `internal/ai`: computer players. Implement the upstream AI levels (Default, Defensive, Offensive, Advanced) by reading `src/players/ai/` upstream. At least one level ships in v1.
+  - `internal/ai`: computer players: the rule-based `Greedy` player and the System 1 advisor.
   - `internal/proto`: message types and JSON encoding.
   - `cmd/server`: flags `-addr`, `-dev`.
-- RNG: seeded per game (`math/rand/v2` PCG). Store the seed and all orders so games are replayable, which makes combat bugs reproducible.
-- State in memory. Optional `/save` and `/load` endpoints write/read a JSON game file (seed + settings + orders log).
+  - `cmd/sim`: plays a seeded game between AIs and prints the log.
+- RNG: seeded per game (`math/rand/v2` PCG). Store the seed and all actions so games are replayable, which makes combat bugs reproducible.
+- State in memory. Optional `/save` and `/load` endpoints write/read a JSON game file (seed + settings + actions log).
 
 ### Client
 
-- TypeScript + Vite. Svelte for the lobby and panels, with the board drawn in SVG (simple hit-testing, scales cleanly, easy to style).
+- TypeScript + Vite. Svelte for the lobby and panels, with the board drawn in SVG (simple hit-testing, scales cleanly, easy to style). See "3D maps" for depth.
 - Board shows planets on the grid with owner colors. Hovering a planet shows name, owner, ships, production and kill percentage, limited to what that player is allowed to see.
-- Order entry: click source, click destination, type a ship count (default to all, Enter to confirm, Esc to cancel). Same flow as the original.
-- Panels: fleet overview (own fleets, ship counts, arrival turn), standings, turn log of messages ("Planet D has held against an attack from Alice"), measure-distance tool (click two planets, show distance and turns).
+- Order entry: click source, click destination, type a ship count (default to all, Enter to confirm, Esc to cancel).
+- Panels: fleet overview (own fleets, ship counts, arrival round), standings, turn log ("Planet D has held against an attack from Alice"), measure-distance tool (click two planets, show distance and turns).
 - Reconnects automatically. On reconnect the server resends the full view for that player.
 
 ### Hidden information
@@ -128,8 +136,8 @@ The server is authoritative. Clients only send intents and render what they're t
 The server builds a **per-player view** each turn and never sends data a player shouldn't see. Hiding enemy data only in the client doesn't count. Rules:
 
 - Own planets: everything.
-- Enemy/neutral planets: name and owner always. Ships, production and kill percentage only if the room settings allow it.
-- Fleets: only your own. Enemy fleets are invisible until they arrive, as in the original.
+- Enemy/neutral planets: name, position and owner always. Ships, production and kill percentage only if the room settings allow it.
+- Fleets: only your own. Enemy fleets are invisible until they arrive.
 - Turn log: a player only gets events that involve them (their attacks, attacks on their planets, their reinforcements), plus global events such as a player being eliminated.
 
 ## Protocol
@@ -139,7 +147,7 @@ JSON over one WebSocket per client at `/ws?room=CODE`. Every message has `{"type
 Client to server:
 - `join {name, token?}`: `token` resumes a seat after reconnect (stored in localStorage).
 - `set_settings {...}` (host only, lobby only)
-- `add_ai {level}` / `remove_seat {seat}` (host only)
+- `add_ai {kind}` / `remove_seat {seat}` (host only)
 - `reroll_map` (host only)
 - `start_game` (host only)
 - `send_fleet {from, to, ships}`: active player only. Final once accepted.
@@ -148,11 +156,11 @@ Client to server:
 Server to client:
 - `welcome {seat, token, room}`
 - `lobby {players, settings, mapPreview}`
-- `your_turn {round, view, deadline?}`: sent to the active player. `view` is that player's state, described above.
+- `your_turn {round, view, deadline?}`: sent to the active player.
 - `player_turn {round, seat, name, deadline?}`: sent to everyone else.
 - `fleet_ack {fleetId, arrivalRound}` / `error {code, message}`
-- `seat_status {seat, connected}`: lets everyone see who has dropped.
-- `round_result {round, events, view}`: sent to each player after the round resolves. Contains only the events and state that player may see.
+- `seat_status {seat, connected}`
+- `round_result {round, events, view}`: sent to each player after the round resolves, with only the events and state that player may see.
 - `game_over {standings}`
 
 Validate every client message on the server: it's the sender's turn, they own the source planet, they have enough ships, the game is in the right phase, and host-only actions come from the host.
@@ -161,15 +169,16 @@ Validate every client message on the server: it's the sender's turn, they own th
 
 - Landing page: "Create game" gives a short room code and shareable URL; "Join" takes a code.
 - Lobby: player list with colors, host controls (settings, add AI, reroll map, start), map preview.
-- Up to 9 seats total (humans + AI), like the original.
+- Up to 9 seats total (humans + AI).
 - A player who disconnects mid-game keeps their seat. Host can switch them to AI after a timeout.
 
 ## Testing
 
-- `rules`: table-driven tests for production, travel time, reinforcement, combat (fixed seeds), several fleets arriving at one planet in the same round, elimination and every room option.
-- Turn order: seat rotation, skipping eliminated players, AI turns, turn timer, disconnect skip, and orders rejected from players who aren't active.
-- Golden replay test: seed + orders log produces the same final state every time.
-- `room`: simulated clients over an in-process WebSocket server to test the turn lifecycle, reconnect mid-turn, and that no message to a waiting player reveals the active player's orders.
+- `rules`: table-driven tests for map generation (2D and 3D), production, travel time, reinforcement, combat (fixed seeds and statistical checks), several fleets arriving at one planet in the same round, elimination and every room option.
+- Turn order: seat rotation, skipping eliminated players, and orders rejected from players who aren't active.
+- Golden replay test: seed + actions log produces the same final state every time.
+- `ai`: AI-vs-AI games finish without illegal orders; the System 1 advisor's oracle scores well, and per-question model accuracy is measurable.
+- `room`: simulated clients over an in-process WebSocket server to test the turn lifecycle, AI turns, turn timer, disconnect skip, reconnect mid-turn, and that no message to a waiting player reveals the active player's orders.
 - One Playwright smoke test: two browsers join, take turns for three rounds, and one captures a neutral.
 
 ## Deployment
@@ -180,14 +189,14 @@ Validate every client message on the server: it's the sender's turn, they own th
 
 ## Milestones
 
-1. `rules` engine + tests, verified against upstream source. Includes a CLI that plays a seeded game between AIs and prints the log.
-2. Server rooms + protocol + one AI level.
-3. Client: lobby, board, order entry, End Turn, turn log.
-4. Fleet overview, standings, measure distance, room options, turn timer.
-5. Remaining AI levels, save/load, Playwright test, polish.
+1. `rules` engine + tests (3D-capable), `RULES.md`, the `Greedy` AI, and `cmd/sim`, which plays a seeded game between AIs and prints the log.
+2. Server rooms + protocol, AI seats using `Greedy`.
+3. Client: lobby, flat SVG board, order entry, End Turn, turn log.
+4. Fleet overview, standings, measure distance, room options, turn timer, 2.5D height display.
+5. System 1 advisor with oracle and accuracy tooling, save/load, Playwright test, polish.
+6. Later: 3D map option and, if playtests justify it, a three.js board.
 
 ## Naming and licensing
 
-- Konquest is GPL-2.0-or-later. Porting its combat/AI code line by line makes this project a derivative work, so either license this project GPL-2.0-or-later (simplest, and recommended) or implement only from the documented rules without translating source. Decide before milestone 1 and record the choice in `README.md`.
-- Pick an original name and art. Don't use KDE's icon or branding.
-- Prior art worth a look: github.com/spacepal/Spacepal-Archive (an unfinished online Konquest).
+- MIT licensed (see `LICENSE`). Clean-room as described above.
+- Original name (Parallax) and art. No KDE icons, names or branding.

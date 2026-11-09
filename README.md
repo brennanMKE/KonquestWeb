@@ -15,6 +15,7 @@ make test                          # rules and AI tests
 make sim ARGS="-seed 7 -depth 4"   # a seeded AI-vs-AI game on a 3D map, with its turn log
 make build && bin/server            # one binary with the web client; open http://localhost:8080
 make e2e                           # browser tests (Playwright)
+scripts/restart.sh                 # stop the running server, rebuild and start again
 ```
 
 ## How it plays

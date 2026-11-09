@@ -1,4 +1,4 @@
-.PHONY: all test vet build web web-check e2e sim dev clean
+.PHONY: all test vet build web web-check e2e sim dev restart clean
 
 all: vet test build
 
@@ -34,6 +34,10 @@ sim:
 # and open the URL Vite prints.
 dev:
 	go run ./cmd/server -dev
+
+# Stop any running server, rebuild and start again (scripts/restart.sh).
+restart:
+	scripts/restart.sh $(ARGS)
 
 clean:
 	rm -rf bin web/dist

@@ -93,6 +93,9 @@ timing attacks) is the next step for the computer players.
 | `cmd/server` | single binary with the frontend embedded |
 | `web/` | TypeScript + Vite + Svelte client, board drawn in SVG |
 
+A `Dockerfile` builds the same single binary into a small image (`docker build -t parallax .`, then
+`docker run -p 8080:8080 parallax`). It hasn't been test-built yet.
+
 For client development, run `make dev` (the Go server on :8080) and `cd web && npm run dev`; Vite
 proxies the API and WebSocket to the Go server.
 

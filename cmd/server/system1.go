@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -19,6 +20,9 @@ type modelHealth struct {
 	every  time.Duration
 	client *http.Client
 
+	// changed, if set, runs when the model goes down or comes back.
+	changed func()
+
 	mu   sync.Mutex
 	down bool
 }
@@ -28,8 +32,8 @@ func newModelHealth(log *slog.Logger, url, key string) *modelHealth {
 		client: &http.Client{Timeout: 5 * time.Second}}
 }
 
-// up reports whether players should ask the model.
-func (h *modelHealth) up() bool {
+// Up reports whether players should ask the model.
+func (h *modelHealth) Up() bool {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	return !h.down
@@ -41,6 +45,13 @@ func (h *modelHealth) failed(err error) {
 	if !h.down {
 		h.down = true
 		h.log.Warn("System 1 model unreachable; computer players use Planner until it's back", "url", h.url, "err", err)
+		h.notify()
+	}
+}
+
+func (h *modelHealth) notify() {
+	if h.changed != nil {
+		go h.changed()
 	}
 }
 
@@ -50,24 +61,24 @@ func (h *modelHealth) answered() {
 	if h.down {
 		h.down = false
 		h.log.Info("System 1 model is back", "url", h.url)
+		h.notify()
 	}
 }
 
-// run checks the model at startup, then keeps checking while it's down.
+// run checks the model at startup and then every few seconds, so the lobby
+// offers System 1 players only while the model answers.
 func (h *modelHealth) run() {
-	if h.check() == nil {
+	if h.Check(context.Background()) == nil {
 		h.log.Info("System 1 model is up; computer players use it by default", "url", h.url)
 	}
 	for range time.Tick(h.every) {
-		if h.up() {
-			continue // Failed requests mark it down.
-		}
-		h.check()
+		h.Check(context.Background())
 	}
 }
 
-func (h *modelHealth) check() error {
-	req, err := http.NewRequest(http.MethodGet, strings.TrimSuffix(h.url, "/predict")+"/health", nil)
+// Check asks the model's /health now.
+func (h *modelHealth) Check(ctx context.Context) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimSuffix(h.url, "/predict")+"/health", nil)
 	if err != nil {
 		return err
 	}

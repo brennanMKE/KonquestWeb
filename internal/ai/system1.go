@@ -243,9 +243,35 @@ type System1 struct {
 	OnError func(error)
 	// OnAnswer, if set, hears about each request the model answered.
 	OnAnswer func()
-	// Ready, if set and false, skips the model and plays Fallback at once,
-	// say while a health check finds it down.
-	Ready func() bool
+	// Health, if set, tracks whether the model is reachable. While it's
+	// down the model is skipped and Fallback plays at once.
+	Health Health
+}
+
+// Health is a service a computer player depends on.
+type Health interface {
+	// Up is the last known state; it must be cheap.
+	Up() bool
+	// Check asks the service now and updates Up.
+	Check(ctx context.Context) error
+}
+
+// Checker is a computer player that depends on a service that may be down.
+// Rooms don't add one while Check fails.
+type Checker interface {
+	Player
+	Health
+}
+
+// Up implements Checker.
+func (s *System1) Up() bool { return s.Health == nil || s.Health.Up() }
+
+// Check implements Checker.
+func (s *System1) Check(ctx context.Context) error {
+	if s.Health == nil {
+		return nil
+	}
+	return s.Health.Check(ctx)
 }
 
 // Name implements Player.
@@ -257,7 +283,7 @@ func (s *System1) Orders(v rules.View) []Order {
 	if sit.Empty() {
 		return Decide(sit, Answers{})
 	}
-	if s.Ready != nil && !s.Ready() && s.Fallback != nil {
+	if !s.Up() && s.Fallback != nil {
 		return s.Fallback.Orders(v)
 	}
 	timeout := s.Timeout

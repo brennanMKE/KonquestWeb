@@ -8,7 +8,9 @@
   let link = $derived(`${location.origin}/?room=${store.room}`);
   // The server lists its default kind first.
   let picked = $state<string | null>(null);
-  let aiKind = $derived(picked ?? store.aiKinds[0] ?? "planner");
+  // A kind the server stops offering (its model went down) drops back to the
+  // default.
+  let aiKind = $derived(picked && store.aiKinds.includes(picked) ? picked : (store.aiKinds[0] ?? "planner"));
   const aiNames: Record<string, string> = {
     planner: "Planner (rules)",
     greedy: "Greedy (simple)",

@@ -81,3 +81,21 @@ func newCode() string {
 	}
 	return string(b)
 }
+
+// RefreshLobbies resends the lobby to every room still in it, say when a
+// computer player kind becomes available or unavailable.
+func (m *Manager) RefreshLobbies() {
+	m.mu.Lock()
+	rooms := make([]*Room, 0, len(m.rooms))
+	for _, r := range m.rooms {
+		rooms = append(rooms, r)
+	}
+	m.mu.Unlock()
+	for _, r := range rooms {
+		r.post(func() {
+			if r.phase == proto.PhaseLobby {
+				r.broadcastLobby()
+			}
+		})
+	}
+}

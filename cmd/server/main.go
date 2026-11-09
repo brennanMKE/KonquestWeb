@@ -37,24 +37,30 @@ func main() {
 
 	players := map[string]ai.Player{proto.AIPlanner: ai.Planner{}, proto.AIGreedy: ai.Greedy{}}
 	defaultAI := proto.AIPlanner
+	var health *modelHealth
 	if *s1URL != "" && *s1URL != "off" {
 		model := &ai.Client{URL: *s1URL, APIKey: *s1Key, Batch: *s1Batch}
-		health := newModelHealth(log, *s1URL, *s1Key)
+		health = newModelHealth(log, *s1URL, *s1Key)
 		players[proto.AISystem1] = &ai.System1{
 			Model:    model,
 			Fallback: ai.Planner{},
 			Timeout:  *s1Timeout,
-			Ready:    health.up,
+			Health:   health,
 			OnError:  health.failed,
 			OnAnswer: health.answered,
 		}
 		defaultAI = proto.AISystem1
-		go health.run()
 	}
 
+	handler := server.New(server.Options{Dev: *dev, Origins: splitList(*origins), Static: static(), Logger: log, Room: room.Options{AI: players, DefaultAI: defaultAI}})
+	if health != nil {
+		// Lobbies show System 1 only while the model answers.
+		health.changed = handler.Rooms().RefreshLobbies
+		go health.run()
+	}
 	srv := &http.Server{
 		Addr:              *addr,
-		Handler:           server.New(server.Options{Dev: *dev, Origins: splitList(*origins), Static: static(), Logger: log, Room: room.Options{AI: players, DefaultAI: defaultAI}}),
+		Handler:           handler,
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

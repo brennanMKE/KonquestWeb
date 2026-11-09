@@ -1,9 +1,12 @@
 package room
 
 import (
+	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"slices"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -795,5 +798,67 @@ func TestDefaultAIKind(t *testing.T) {
 	}
 	if got := l.Seats[1].AIKind; got != "model" {
 		t.Fatalf("added %q, want the default", got)
+	}
+}
+
+// modelAI is a computer player that depends on a service that can go down.
+type modelAI struct {
+	ai.Greedy
+	up atomic.Bool
+}
+
+func (m *modelAI) Name() string { return "Model" }
+func (m *modelAI) Up() bool     { return m.up.Load() }
+func (m *modelAI) Check(context.Context) error {
+	if !m.up.Load() {
+		return errors.New("unreachable")
+	}
+	return nil
+}
+
+func TestUnreachableModelPlayers(t *testing.T) {
+	model := &modelAI{}
+	r := newRoom(t, Options{AI: map[string]ai.Player{"planner": ai.Planner{}, "model": model}, DefaultAI: "model"})
+	alice, _ := join(t, r, "Alice")
+
+	// Down: not offered, can't be added, and the default is Planner.
+	alice.send(&proto.AddAI{Kind: "model"})
+	if code := errCode(t, alice); code != proto.ErrAIUnavailable {
+		t.Fatalf("adding while down: %s", code)
+	}
+	l := expect[proto.Lobby](alice)
+	if !slices.Equal(l.AIKinds, []string{"planner"}) || len(l.Seats) != 1 {
+		t.Fatalf("while down: kinds %v, %d seats", l.AIKinds, len(l.Seats))
+	}
+	alice.send(&proto.AddAI{})
+	if l := expect[proto.Lobby](alice); l.Seats[1].AIKind != "planner" {
+		t.Fatalf("default while down: %q", l.Seats[1].AIKind)
+	}
+
+	// Up: offered first and added.
+	model.up.Store(true)
+	alice.send(&proto.AddAI{Kind: "model"})
+	l = expect[proto.Lobby](alice)
+	if len(l.Seats) != 3 || l.Seats[2].AIKind != "model" || l.AIKinds[0] != "model" {
+		t.Fatalf("while up: kinds %v, seats %+v", l.AIKinds, l.Seats)
+	}
+
+	// Down again before the start: the game doesn't start.
+	model.up.Store(false)
+	s := proto.DefaultSettings()
+	s.AIDelayMs = 0
+	alice.send(&proto.SetSettings{Settings: s})
+	expect[proto.Lobby](alice)
+	alice.send(&proto.StartGame{})
+	if code := errCode(t, alice); code != proto.ErrAIUnavailable {
+		t.Fatalf("starting while down: %s", code)
+	}
+	if l := expect[proto.Lobby](alice); l.Phase != proto.PhaseLobby {
+		t.Fatalf("phase %s", l.Phase)
+	}
+	model.up.Store(true)
+	alice.send(&proto.StartGame{})
+	if l := expect[proto.Lobby](alice); l.Phase != proto.PhasePlaying {
+		t.Fatalf("phase %s after the model came back", l.Phase)
 	}
 }

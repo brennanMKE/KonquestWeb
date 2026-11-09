@@ -4,6 +4,7 @@
 package room
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
@@ -461,28 +462,40 @@ func (r *Room) aiKind(kind string) (string, bool) {
 	return kind, ok
 }
 
+// available reports whether a kind can be added now, as last known: a
+// player that depends on a service (System 1) only while it's up.
+func (r *Room) available(kind string) bool {
+	p, ok := r.opts.AI[kind]
+	if !ok {
+		return false
+	}
+	ch, ok := p.(ai.Checker)
+	return !ok || ch.Up()
+}
+
 func (r *Room) defaultAI() string {
 	for _, k := range []string{r.opts.DefaultAI, proto.AIPlanner} {
-		if _, ok := r.opts.AI[k]; ok {
+		if r.available(k) {
 			return k
 		}
 	}
-	kinds := slices.Sorted(maps.Keys(r.opts.AI))
-	if len(kinds) == 0 {
-		return proto.AIPlanner
+	for _, k := range slices.Sorted(maps.Keys(r.opts.AI)) {
+		if r.available(k) {
+			return k
+		}
 	}
-	return kinds[0]
+	return proto.AIPlanner
 }
 
 // aiKinds lists the kinds on offer, the default first.
 func (r *Room) aiKinds() []string {
 	def := r.defaultAI()
 	kinds := []string{}
-	if _, ok := r.opts.AI[def]; ok {
+	if r.available(def) {
 		kinds = append(kinds, def)
 	}
 	for _, k := range slices.Sorted(maps.Keys(r.opts.AI)) {
-		if k != def {
+		if k != def && r.available(k) {
 			kinds = append(kinds, k)
 		}
 	}
@@ -499,7 +512,43 @@ func (r *Room) addAI(c *Client, kind string) {
 		r.sendError(c, proto.ErrRoomFull, "the room is full")
 		return
 	}
-	r.seats = append(r.seats, &seat{kind: proto.KindAI, aiKind: kind, name: r.aiName()})
+	ch, checked := r.opts.AI[kind].(ai.Checker)
+	if !checked {
+		r.seats = append(r.seats, &seat{kind: proto.KindAI, aiKind: kind, name: r.aiName()})
+		r.broadcastLobby()
+		return
+	}
+	// Ask the service now, off the room goroutine, and add the player only
+	// if it answers.
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), checkTimeout)
+		defer cancel()
+		err := ch.Check(ctx)
+		r.post(func() {
+			if r.phase != proto.PhaseLobby {
+				return
+			}
+			if err != nil {
+				r.unavailable(c, ch)
+				return
+			}
+			if len(r.seats) >= rules.MaxPlayers {
+				r.sendError(c, proto.ErrRoomFull, "the room is full")
+				return
+			}
+			r.seats = append(r.seats, &seat{kind: proto.KindAI, aiKind: kind, name: r.aiName()})
+			r.broadcastLobby()
+		})
+	}()
+}
+
+// checkTimeout bounds asking a computer player's service whether it's up.
+const checkTimeout = 3 * time.Second
+
+// unavailable tells the host a kind of computer can't be used now, and
+// refreshes the lobby so it's no longer offered.
+func (r *Room) unavailable(c *Client, p ai.Player) {
+	r.sendError(c, proto.ErrAIUnavailable, "The %s model can't be reached right now, so %s players can't be added. Add a Planner instead, or try again later.", p.Name(), p.Name())
 	r.broadcastLobby()
 }
 
@@ -583,6 +632,42 @@ func (r *Room) allComputers() bool {
 }
 
 func (r *Room) start(c *Client) {
+	// Computer players that depend on a service start only if it answers.
+	var checks []ai.Checker
+	for _, s := range r.seats {
+		if ch, ok := r.opts.AI[s.aiKind].(ai.Checker); ok && s.kind == proto.KindAI && !slices.Contains(checks, ch) {
+			checks = append(checks, ch)
+		}
+	}
+	if len(checks) == 0 {
+		r.begin(c)
+		return
+	}
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), checkTimeout)
+		defer cancel()
+		var failed ai.Checker
+		for _, ch := range checks {
+			if ch.Check(ctx) != nil {
+				failed = ch
+				break
+			}
+		}
+		r.post(func() {
+			if r.phase != proto.PhaseLobby {
+				return
+			}
+			if failed != nil {
+				r.sendError(c, proto.ErrAIUnavailable, "The %s model can't be reached right now. Remove its players or try again later.", failed.Name())
+				r.broadcastLobby()
+				return
+			}
+			r.begin(c)
+		})
+	}()
+}
+
+func (r *Room) begin(c *Client) {
 	g, err := rules.New(len(r.seats), r.settings.Settings, r.seed)
 	if err != nil {
 		r.sendError(c, proto.ErrBadSetting, "%v", err)
@@ -599,6 +684,10 @@ func (r *Room) replaceWithAI(c *Client, m *proto.ReplaceWithAI) {
 	kind, ok := r.aiKind(m.Kind)
 	if !ok {
 		r.sendError(c, proto.ErrBadMessage, "unknown AI kind %q", m.Kind)
+		return
+	}
+	if !r.available(kind) {
+		r.unavailable(c, r.opts.AI[kind])
 		return
 	}
 	if m.Seat < 0 || m.Seat >= len(r.seats) {

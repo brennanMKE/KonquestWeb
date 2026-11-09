@@ -174,7 +174,7 @@ func TestSystem1FallsBack(t *testing.T) {
 	}
 	// While the model is known to be down it isn't asked at all.
 	errs = 0
-	p.Ready = func() bool { return false }
+	p.Health = fixedHealth(false)
 	if got := p.Orders(v); errs != 0 || len(got) != len(want) {
 		t.Fatalf("not ready: errs %d, orders %v want %v", errs, got, want)
 	}
@@ -339,4 +339,14 @@ func TestPlannerBeatsGreedy(t *testing.T) {
 	if wins*2 <= games {
 		t.Fatalf("Planner won %d of %d against Greedy", wins, games)
 	}
+}
+
+type fixedHealth bool
+
+func (h fixedHealth) Up() bool { return bool(h) }
+func (h fixedHealth) Check(context.Context) error {
+	if !h {
+		return errors.New("down")
+	}
+	return nil
 }

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"io"
 	"log/slog"
@@ -21,23 +22,23 @@ func TestModelHealth(t *testing.T) {
 	defer model.Close()
 	h := newModelHealth(slog.New(slog.NewTextHandler(io.Discard, nil)), model.URL+"/predict", "k")
 
-	if err := h.check(); err != nil || !h.up() {
-		t.Fatalf("healthy model: up=%v err=%v", h.up(), err)
+	if err := h.Check(context.Background()); err != nil || !h.Up() {
+		t.Fatalf("healthy model: up=%v err=%v", h.Up(), err)
 	}
 	h.failed(errors.New("timeout"))
-	if h.up() {
+	if h.Up() {
 		t.Fatal("still up after a failed request")
 	}
 	ok.Store(false)
-	if h.check() == nil || h.up() {
+	if h.Check(context.Background()) == nil || h.Up() {
 		t.Fatal("a failing health check brought it back")
 	}
 	ok.Store(true)
-	if err := h.check(); err != nil || !h.up() {
-		t.Fatalf("recovered model: up=%v err=%v", h.up(), err)
+	if err := h.Check(context.Background()); err != nil || !h.Up() {
+		t.Fatalf("recovered model: up=%v err=%v", h.Up(), err)
 	}
 	model.Close()
-	if h.check() == nil || h.up() {
+	if h.Check(context.Background()) == nil || h.Up() {
 		t.Fatal("unreachable model counted as up")
 	}
 }

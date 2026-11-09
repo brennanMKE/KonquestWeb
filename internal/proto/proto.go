@@ -70,6 +70,9 @@ const (
 	ErrBadOrder    = "bad_order"
 	ErrRemoved     = "removed"
 	ErrReplaced    = "replaced"
+	// ErrAIUnavailable: that kind of computer player needs a service that
+	// can't be reached right now.
+	ErrAIUnavailable = "ai_unavailable"
 )
 
 // Client to server.

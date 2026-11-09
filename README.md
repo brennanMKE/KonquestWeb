@@ -6,13 +6,14 @@ see, and turns resolve on an authoritative Go server over WebSockets.
 
 The name nods to stellar parallax, the way astronomers measure the distance to stars.
 
-**Status:** milestone 2 (server, rooms and protocol). See [SPEC.md](SPEC.md) for the design and milestones, and
+**Status:** milestone 3 (playable in the browser). See [SPEC.md](SPEC.md) for the design and milestones, and
 [RULES.md](RULES.md) for the exact rules.
 
 ```sh
 make test                          # rules and AI tests
 make sim ARGS="-seed 7 -depth 4"   # a seeded AI-vs-AI game on a 3D map, with its turn log
-make build && bin/server -addr :8080   # the game server (web client arrives in milestone 3)
+make build && bin/server            # one binary with the web client; open http://localhost:8080
+make e2e                           # browser smoke test (Playwright)
 ```
 
 ## How it plays
@@ -58,6 +59,9 @@ A simple rule-based player is planned as well, so games work without a model run
 | `cmd/sim` | plays a seeded game between computer players and prints the log |
 | `cmd/server` | single binary with the frontend embedded |
 | `web/` | TypeScript + Vite + Svelte client, board drawn in SVG |
+
+For client development, run `make dev` (the Go server on :8080) and `cd web && npm run dev`; Vite
+proxies the API and WebSocket to the Go server.
 
 ## License
 

@@ -1,7 +1,9 @@
+//go:build !embed
+
 package main
 
 import "io/fs"
 
-// static returns the embedded web client. The client arrives in milestone 3;
-// until then the server shows a placeholder page.
+// static returns nil without the embed tag, so the server shows a
+// placeholder page. `make build` builds with the client embedded.
 func static() fs.FS { return nil }

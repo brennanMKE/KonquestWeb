@@ -25,27 +25,34 @@ export function popOut(room: string, ondock: () => void): Popout | null {
   doc.body.replaceChildren();
   doc.title = `Parallax ${room}: controls`;
   doc.documentElement.lang = "en";
-  // Same styles as this page: Vite's <style> tags in development, the built
-  // stylesheet links in production.
   const meta = doc.createElement("meta");
   meta.name = "color-scheme";
   meta.content = "dark";
   doc.head.append(meta);
-  for (const el of document.head.querySelectorAll("style, link[rel=stylesheet]")) {
+  // Same styles as this page, copied as text so they apply at once rather
+  // than after the window fetches the stylesheet again. Lazily loaded
+  // components add theirs later; those are copied as they arrive.
+  const copyStyle = (el: Node) => {
+    if (!(el instanceof HTMLStyleElement || (el instanceof HTMLLinkElement && el.rel === "stylesheet"))) return;
+    const style = doc.createElement("style");
+    try {
+      const rules = el.sheet?.cssRules;
+      if (rules) {
+        style.textContent = Array.from(rules, (r) => r.cssText).join("\n");
+        doc.head.append(style);
+        return;
+      }
+    } catch {
+      // Not readable (or not loaded yet): fall back to a copy of the element.
+    }
     const copy = el.cloneNode(true) as HTMLElement;
     // Absolute, since the new window's address is about:blank.
     if (el instanceof HTMLLinkElement) (copy as HTMLLinkElement).href = el.href;
     doc.head.append(copy);
-  }
-  // Svelte adds styles for lazily loaded components later; copy those too.
+  };
+  for (const el of document.head.querySelectorAll("style, link[rel=stylesheet]")) copyStyle(el);
   const styles = new MutationObserver((records) => {
-    for (const r of records)
-      for (const n of r.addedNodes)
-        if (n instanceof HTMLStyleElement || (n instanceof HTMLLinkElement && n.rel === "stylesheet")) {
-          const copy = n.cloneNode(true) as HTMLElement;
-          if (n instanceof HTMLLinkElement) (copy as HTMLLinkElement).href = n.href;
-          doc.head.append(copy);
-        }
+    for (const r of records) for (const n of r.addedNodes) copyStyle(n);
   });
   styles.observe(document.head, { childList: true });
 

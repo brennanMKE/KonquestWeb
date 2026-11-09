@@ -1,4 +1,4 @@
-.PHONY: all test vet build linux-arm64 web web-check e2e sim dev restart clean
+.PHONY: all test vet build linux-arm64 e2e-prod web web-check e2e sim dev restart clean
 
 all: vet test build
 
@@ -30,6 +30,10 @@ build: web
 # The server for photon (EC2, Linux arm64): bin/parallax-linux-arm64.
 linux-arm64: web
 	GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -tags embed -trimpath -ldflags="-s -w" -o bin/parallax-linux-arm64 ./cmd/server
+
+# Browser tests against the live site (or PARALLAX_URL).
+e2e-prod: web/node_modules
+	cd web && npx playwright test -c playwright.prod.config.ts
 
 sim:
 	go run ./cmd/sim $(ARGS)

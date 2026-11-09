@@ -1,8 +1,8 @@
-# Galactic Conquest Web: Spec for Claude Code
+# Parallax: Spec for Claude Code
 
 A browser-based, real-time multiplayer remake of KDE Konquest (originally GNU-Lactic Konquest). Players join a room from any browser, each sees only what their empire would see, and turns resolve on the server over WebSockets.
 
-Working name: **Konquest Web** (placeholder; see "Naming and licensing").
+Name: **Parallax**. Go module path: `parallax`.
 
 ## Goals
 

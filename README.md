@@ -1,10 +1,10 @@
-# Konquest Web
+# Parallax
 
 A browser-based, real-time multiplayer space strategy game in the style of KDE Konquest (originally
 GNU-Lactic Konquest). Players join a room from any browser, each sees only what their own empire would
 see, and turns resolve on an authoritative Go server over WebSockets.
 
-"Konquest Web" is a working name. The final name and art will be original.
+The name nods to stellar parallax, the way astronomers measure the distance to stars.
 
 **Status:** planning. See [SPEC.md](SPEC.md) for the design and milestones.
 

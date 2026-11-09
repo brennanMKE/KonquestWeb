@@ -20,6 +20,10 @@ Then start Parallax with `-system1 http://127.0.0.1:8799/predict`.
   `HF_HOME`. Plan on about 1.5 GB of memory.
 - Flags: `--host` (default 127.0.0.1), `--port`, `--device` (cpu, cuda, mps;
   default auto), `--cache-size` (answers to cache, default 10000).
+- `--key` or `SYSTEM1_LAYA_KEY` requires `Authorization: Bearer <key>` on
+  /predict and /stats (/health stays open). Give Parallax the same key in
+  `PARALLAX_SYSTEM1_KEY` (or `-system1-key`); keep both in root-only
+  environment files rather than on the command line.
 - Environment: `SYSTEM1_LAYA_MODEL` (another checkpoint),
   `SYSTEM1_LAYA_WEIGHTS` (tuned head), `SYSTEM1_LAYA_CACHE` (cache size).
 - On an Apple M-series CPU with no GPU, a decision on a 32³ map takes about

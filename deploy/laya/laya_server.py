@@ -12,13 +12,18 @@ Answers are cached by (state, question), since Laya gives the same answer to
 the same prompt; only misses reach the model. --cache-size 0 (or
 SYSTEM1_LAYA_CACHE=0) turns the cache off.
 
+--key (or SYSTEM1_LAYA_KEY) requires "Authorization: Bearer <key>" on
+/predict and /stats; /health stays open for monitoring.
+
 --weights (or SYSTEM1_LAYA_WEIGHTS) applies a head tuned by agents/finetune.py
 on top of the base model; without it the base model answers.
 
 A custom agent implements the same POST contract with its own logic.
 """
 import argparse
+import hmac
 import json
+import os
 import sys
 import threading
 import time
@@ -36,7 +41,13 @@ def main():
     p.add_argument("--device", help="mps, cuda or cpu (default: auto)")
     p.add_argument("--cache-size", type=int, help="answers to cache, 0 = off (default: $SYSTEM1_LAYA_CACHE or 10000)")
     p.add_argument("--stats-every", type=float, default=0, help="print cache stats every N seconds (0 = never)")
+    p.add_argument("--key", help="require this Bearer token on /predict and /stats (default: $SYSTEM1_LAYA_KEY, else none)")
     args = p.parse_args()
+    key = args.key or os.environ.get("SYSTEM1_LAYA_KEY", "").strip()
+    want = f"Bearer {key}".encode()
+
+    def authorized(headers):
+        return not key or hmac.compare_digest(headers.get("Authorization", "").encode(), want)
 
     from laya_batch import AnswerCache, answer_cached, cache_size_from_env, load_model, predict_many
 
@@ -60,6 +71,8 @@ def main():
             if self.path == "/health":
                 return self.reply(200, {"ok": True})
             if self.path == "/stats":
+                if not authorized(self.headers):
+                    return self.reply(401, {"error": "unauthorized"})
                 with lock:
                     return self.reply(200, cache.stats())
             self.reply(404, {"error": "not found"})
@@ -67,6 +80,8 @@ def main():
         def do_POST(self):
             if self.path != "/predict":
                 return self.reply(404, {"error": "POST /predict"})
+            if not authorized(self.headers):
+                return self.reply(401, {"error": "unauthorized"})
             try:
                 body = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))))
                 with lock:
@@ -90,7 +105,7 @@ def main():
                 with lock:
                     print(cache.summary(), flush=True)
         threading.Thread(target=report, daemon=True).start()
-    print(f"agent ready http://{args.host}:{server.server_port}/predict", flush=True)
+    print(f"agent ready http://{args.host}:{server.server_port}/predict" + (" (key required)" if key else ""), flush=True)
     try:
         server.serve_forever()
     except KeyboardInterrupt:

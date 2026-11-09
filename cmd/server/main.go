@@ -23,7 +23,7 @@ func main() {
 	addr := flag.String("addr", ":8080", "listen address")
 	dev := flag.Bool("dev", false, "development mode: accept WebSockets from any origin, debug logs")
 	s1URL := flag.String("system1", "", `System 1 decision endpoint for computer players, e.g. http://127.0.0.1:8799/predict (off when empty). When set, System 1 is the default computer; while it's unreachable those players play as Planner`)
-	s1Key := flag.String("system1-key", "", "API key for the System 1 endpoint (sent as a Bearer token)")
+	s1Key := flag.String("system1-key", os.Getenv("PARALLAX_SYSTEM1_KEY"), "API key for the System 1 endpoint, sent as a Bearer token (default $PARALLAX_SYSTEM1_KEY, which keeps it out of the process list)")
 	s1Batch := flag.Bool("system1-batch", true, "send several states per request; off sends one request per state")
 	s1Timeout := flag.Duration("system1-timeout", 15*time.Second, "longest wait for one System 1 decision before playing Planner that turn")
 	origins := flag.String("origin", "", "comma-separated hosts whose pages may connect, for a proxy that rewrites Host (e.g. yoyo.example.ts.net)")

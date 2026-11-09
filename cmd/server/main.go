@@ -21,7 +21,7 @@ import (
 func main() {
 	addr := flag.String("addr", ":8080", "listen address")
 	dev := flag.Bool("dev", false, "development mode: accept WebSockets from any origin, debug logs")
-	s1URL := flag.String("system1", "", "System 1 decision endpoint for computer players, e.g. http://127.0.0.1:8000/predict")
+	s1URL := flag.String("system1", defaultSystem1, `System 1 decision endpoint for computer players; "off" for none. While it's unreachable they play as Planner`)
 	s1Key := flag.String("system1-key", "", "API key for the System 1 endpoint (sent as a Bearer token)")
 	s1Batch := flag.Bool("system1-batch", true, "send several states per request; off sends one request per state")
 	flag.Parse()
@@ -33,17 +33,23 @@ func main() {
 	log := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level}))
 
 	players := map[string]ai.Player{proto.AIPlanner: ai.Planner{}, proto.AIGreedy: ai.Greedy{}}
-	if *s1URL != "" {
+	defaultAI := proto.AIPlanner
+	if *s1URL != "" && *s1URL != "off" {
+		model := &ai.Client{URL: *s1URL, APIKey: *s1Key, Batch: *s1Batch}
+		health := newModelHealth(log, *s1URL)
 		players[proto.AISystem1] = &ai.System1{
-			Model:    &ai.Client{URL: *s1URL, APIKey: *s1Key, Batch: *s1Batch},
+			Model:    model,
 			Fallback: ai.Planner{},
-			OnError:  func(err error) { log.Warn("System 1 model failed; playing Planner this turn", "err", err) },
+			OnError:  health.failed,
+			OnAnswer: health.answered,
 		}
+		defaultAI = proto.AISystem1
+		go health.probe(*s1URL)
 	}
 
 	srv := &http.Server{
 		Addr:              *addr,
-		Handler:           server.New(server.Options{Dev: *dev, Static: static(), Logger: log, Room: room.Options{AI: players}}),
+		Handler:           server.New(server.Options{Dev: *dev, Static: static(), Logger: log, Room: room.Options{AI: players, DefaultAI: defaultAI}}),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

@@ -6,7 +6,9 @@
   import type { Settings } from "./proto";
 
   let link = $derived(`${location.origin}/?room=${store.room}`);
-  let aiKind = $state("planner");
+  // The server lists its default kind first.
+  let picked = $state<string | null>(null);
+  let aiKind = $derived(picked ?? store.aiKinds[0] ?? "planner");
   const aiNames: Record<string, string> = {
     planner: "Planner (rules)",
     greedy: "Greedy (simple)",
@@ -127,7 +129,7 @@
             Add computer
           </button>
           {#if store.aiKinds.length > 1}
-            <select bind:value={aiKind} aria-label="Computer player type">
+            <select value={aiKind} onchange={(e) => (picked = e.currentTarget.value)} aria-label="Computer player type">
               {#each store.aiKinds as k (k)}<option value={k}>{aiNames[k] ?? k}</option>{/each}
             </select>
           {/if}

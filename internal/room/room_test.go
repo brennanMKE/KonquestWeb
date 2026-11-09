@@ -3,6 +3,7 @@ package room
 import (
 	"io"
 	"log/slog"
+	"slices"
 	"testing"
 	"time"
 
@@ -781,5 +782,18 @@ func TestWatcherWithHumansSeesOnlyPublic(t *testing.T) {
 	host.send(&proto.Watch{Watch: false})
 	if code := errCode(t, host); code != proto.ErrWrongPhase {
 		t.Fatalf("unwatch mid-game: %s", code)
+	}
+}
+
+func TestDefaultAIKind(t *testing.T) {
+	r := newRoom(t, Options{AI: map[string]ai.Player{"planner": ai.Planner{}, "greedy": ai.Greedy{}, "model": ai.Greedy{}}, DefaultAI: "model"})
+	alice, _ := join(t, r, "Alice")
+	alice.send(&proto.AddAI{})
+	l := expect[proto.Lobby](alice)
+	if want := []string{"model", "greedy", "planner"}; !slices.Equal(l.AIKinds, want) {
+		t.Fatalf("AI kinds %v, want %v", l.AIKinds, want)
+	}
+	if got := l.Seats[1].AIKind; got != "model" {
+		t.Fatalf("added %q, want the default", got)
 	}
 }

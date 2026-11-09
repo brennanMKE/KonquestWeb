@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	mrand "math/rand/v2"
 	"slices"
 	"strings"
@@ -49,6 +50,9 @@ type Options struct {
 	// Planner and Greedy. A seat whose kind isn't listed (say, from a saved
 	// game) plays as Planner.
 	AI map[string]ai.Player
+	// DefaultAI is the kind added when the host doesn't name one, and the
+	// lobby's first choice. Empty means Planner.
+	DefaultAI string
 }
 
 type seat struct {
@@ -451,18 +455,37 @@ func (r *Room) setSettings(c *Client, ps proto.Settings) {
 
 func (r *Room) aiKind(kind string) (string, bool) {
 	if kind == "" {
-		kind = proto.AIPlanner
+		kind = r.defaultAI()
 	}
 	_, ok := r.opts.AI[kind]
 	return kind, ok
 }
 
-func (r *Room) aiKinds() []string {
-	kinds := make([]string, 0, len(r.opts.AI))
-	for k := range r.opts.AI {
-		kinds = append(kinds, k)
+func (r *Room) defaultAI() string {
+	for _, k := range []string{r.opts.DefaultAI, proto.AIPlanner} {
+		if _, ok := r.opts.AI[k]; ok {
+			return k
+		}
 	}
-	slices.Sort(kinds)
+	kinds := slices.Sorted(maps.Keys(r.opts.AI))
+	if len(kinds) == 0 {
+		return proto.AIPlanner
+	}
+	return kinds[0]
+}
+
+// aiKinds lists the kinds on offer, the default first.
+func (r *Room) aiKinds() []string {
+	def := r.defaultAI()
+	kinds := []string{}
+	if _, ok := r.opts.AI[def]; ok {
+		kinds = append(kinds, def)
+	}
+	for _, k := range slices.Sorted(maps.Keys(r.opts.AI)) {
+		if k != def {
+			kinds = append(kinds, k)
+		}
+	}
 	return kinds
 }
 

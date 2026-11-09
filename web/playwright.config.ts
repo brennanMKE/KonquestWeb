@@ -8,7 +8,7 @@ export default defineConfig({
   use: { baseURL: "http://127.0.0.1:8787", trace: "retain-on-failure" },
   webServer: {
     command:
-      "npm run build && cd .. && go build -tags embed -o bin/server ./cmd/server && bin/server -addr 127.0.0.1:8787",
+      "npm run build && cd .. && go build -tags embed -o bin/server ./cmd/server && bin/server -addr 127.0.0.1:8787 -system1 off",
     url: "http://127.0.0.1:8787",
     reuseExistingServer: false,
     timeout: 120_000,

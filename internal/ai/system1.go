@@ -241,6 +241,8 @@ type System1 struct {
 	Timeout time.Duration
 	// OnError, if set, hears about failed requests.
 	OnError func(error)
+	// OnAnswer, if set, hears about each request the model answered.
+	OnAnswer func()
 }
 
 // Name implements Player.
@@ -267,6 +269,9 @@ func (s *System1) Orders(v rules.View) []Order {
 			return s.Fallback.Orders(v)
 		}
 		return nil
+	}
+	if s.OnAnswer != nil {
+		s.OnAnswer()
 	}
 	return Decide(sit, ans)
 }

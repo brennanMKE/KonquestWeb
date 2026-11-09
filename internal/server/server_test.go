@@ -304,3 +304,16 @@ func TestLoadRejectsBadFiles(t *testing.T) {
 		resp.Body.Close()
 	}
 }
+
+func TestHealthz(t *testing.T) {
+	ts := httptest.NewServer(New(Options{}))
+	defer ts.Close()
+	resp, err := http.Get(ts.URL + "/healthz")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status %d, want 200", resp.StatusCode)
+	}
+}

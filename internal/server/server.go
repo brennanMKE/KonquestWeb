@@ -59,6 +59,10 @@ func New(opts Options) *Server {
 	s.mux.HandleFunc("GET /api/rooms/{code}/save", s.saveRoom)
 	s.mux.HandleFunc("POST /api/load", s.loadRoom)
 	s.mux.HandleFunc("GET /ws", s.websocket)
+	s.mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.Write([]byte("ok\n"))
+	})
 	if opts.Static != nil {
 		s.mux.Handle("GET /", http.FileServerFS(opts.Static))
 	} else {

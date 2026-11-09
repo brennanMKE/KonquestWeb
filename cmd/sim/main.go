@@ -26,7 +26,7 @@ func main() {
 	flag.BoolVar(&s.BlindMap, "blind", s.BlindMap, "blind map")
 	flag.IntVar(&s.MaxRounds, "rounds", 200, "max rounds (0 = unlimited)")
 	quiet := flag.Bool("q", false, "print only the standings")
-	kinds := flag.String("ai", "greedy", "computer player per seat, comma-separated and repeated: greedy, oracle or system1")
+	kinds := flag.String("ai", "greedy", "computer player per seat, comma-separated and repeated: greedy, planner, oracle or system1")
 	url := flag.String("url", "", "System 1 decision endpoint, e.g. http://127.0.0.1:8000/predict")
 	key := flag.String("key", "", "API key for the endpoint (sent as a Bearer token)")
 	batch := flag.Bool("batch", true, "send several states in one request; off sends one request per state")
@@ -68,7 +68,7 @@ func run(players int, s rules.Settings, seed uint64, cfg config) error {
 	for i := range kinds {
 		kinds[i] = strings.TrimSpace(cfg.kinds[i%len(cfg.kinds)])
 		switch kinds[i] {
-		case "greedy", "oracle":
+		case "greedy", "planner", "oracle":
 		case "system1":
 			if cfg.client == nil {
 				return fmt.Errorf("system1 needs -url")
@@ -104,10 +104,10 @@ func run(players int, s rules.Settings, seed uint64, cfg config) error {
 	if t.asked > 0 {
 		fmt.Printf("System 1 agreed with the oracle on %d of %d questions (%.1f%%), %.0f ms per decision.\n",
 			t.agreed, t.asked, 100*float64(t.agreed)/float64(t.asked), float64(t.elapsed.Milliseconds())/float64(t.decisions))
-		for _, truth := range []string{"good", "bad"} {
+		for _, truth := range []string{"good", "bad", "danger", "safe"} {
 			n := t.byTruth[truth]
 			if n[0] > 0 {
-				fmt.Printf("  when the oracle said %-4s %d of %d\n", truth+":", n[1], n[0])
+				fmt.Printf("  when the oracle said %-7s %d of %d\n", truth+":", n[1], n[0])
 			}
 		}
 	}
@@ -158,25 +158,29 @@ func turn(g *rules.Game, kind string, cfg config, t *tally) ([]rules.Event, erro
 	switch kind {
 	case "greedy":
 		return ai.TakeTurn(g, seat, ai.Greedy{})
+	case "planner":
+		return ai.TakeTurn(g, seat, ai.Planner{})
 	case "oracle":
 		return ai.TakeTurn(g, seat, ai.Oracle{Game: g})
 	}
 	v := g.View(seat)
-	cands := ai.Candidates(v)
+	sit := ai.Assess(v)
 	var orders []ai.Order
-	if len(cands) > 0 {
+	if sit.Empty() {
+		orders = ai.Decide(sit, ai.Answers{})
+	} else {
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		start := time.Now()
-		ans, err := cfg.client.Ask(ctx, ai.BuildPrompt(cands))
+		ans, err := cfg.client.Ask(ctx, sit.Prompt())
 		cancel()
 		if err != nil {
 			return nil, fmt.Errorf("model: %w", err)
 		}
 		t.elapsed += time.Since(start)
 		t.decisions++
-		truth := ai.OracleAnswers(g.State(), cands)
-		for _, c := range cands {
-			want, got := truth[c.Key+".move"].Choice, ans[c.Key+".move"].Choice
+		truth := ai.OracleAnswers(g.State(), sit)
+		check := func(key, state string) {
+			want, got := truth[key].Choice, ans[key].Choice
 			n := t.byTruth[want]
 			n[0]++
 			t.asked++
@@ -184,11 +188,17 @@ func turn(g *rules.Game, kind string, cfg config, t *tally) ([]rules.Event, erro
 				n[1]++
 				t.agreed++
 			} else if cfg.verbose {
-				fmt.Printf("  model said %q, oracle %q: %s\n", got, want, c.State)
+				fmt.Printf("  model said %q, oracle %q: %s\n", got, want, state)
 			}
 			t.byTruth[want] = n
 		}
-		orders = ai.Decide(v, cands, ans)
+		for _, d := range sit.Dangers {
+			check(d.Key+".danger", d.State)
+		}
+		for _, c := range sit.Attacks {
+			check(c.Key+".move", c.State)
+		}
+		orders = ai.Decide(sit, ans)
 	}
 	for _, o := range orders {
 		if _, err := g.Launch(seat, o.From, o.To, o.Ships); err != nil {

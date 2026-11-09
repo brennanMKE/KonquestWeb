@@ -47,7 +47,28 @@ situation. Any HTTP endpoint that speaks the same `{state, questions}` → `{ans
 plugged in, and every prompt has an "oracle" answer computed from the true game state, so decision
 quality can be measured.
 
-A rule-based player (`Greedy`) needs no model and is always available.
+Every smart computer player shares one strategy, the **planner**. Each turn it asks two kinds of question:
+
+- for each of its planets an enemy could reach within four rounds: *is this planet in danger or safe?*
+  ("Planet F is in danger: enemy ships nearby would probably capture it.")
+- for each promising attack: *is this attack a good bet or a bad bet?*
+
+Then it decides in priority order: planets in danger keep all their ships, and safe planets that can arrive
+before the enemy send exactly enough reinforcements to bring the enemy's odds under 30%; next it makes the
+good-bet attacks; last, safe planets far from the enemy move their leftover ships to the planet nearest the
+enemy. Enemy fleets are invisible, so "danger" means what nearby enemy planets *could* do.
+
+Three players answer the questions differently:
+
+| Player | Answers from | Where |
+|---|---|---|
+| **Planner** | its own estimates of what it can see | rooms (the default computer) |
+| **System 1** | a System 1 model such as Laya | rooms, with `-system1` |
+| **Oracle** | the true game state | `cmd/sim` only, for measuring |
+
+`Greedy`, the original simple player, is still offered: it only attacks, never defends, and hoards ships.
+Over 20 four-player games against three Greedy players, Planner won 12 (chance is 5); one on one it won 13
+of 20.
 
 ### Running with a model
 
@@ -59,7 +80,7 @@ bin/server -system1 http://127.0.0.1:8799/predict # hosts can now add "System 1 
 ```
 
 `-system1-key` sends an API key as a Bearer token; `-system1-batch=false` sends one request per state for
-endpoints that don't take batches. If the model can't be reached, that computer plays as Greedy for the
+endpoints that don't take batches. If the model can't be reached, that computer plays as Planner for the
 turn.
 
 ### Measuring a model
@@ -77,9 +98,11 @@ questions; every miss was a "good" answer for a losing attack. Leading with the 
 probably lose." asked *a good bet or a bad bet?*) reached 100% of 1,764 questions over five games, at
 30–140 ms per decision.
 
-The oracle's own strategy is the ceiling for now, and it's no stronger than Greedy: in 4-player games
-against three Greedy players it won about one game in four. Better strategy (defending, reinforcing,
-timing attacks) is the next step for the computer players.
+The danger questions, written the same way from the start, scored 100% on their first run: Laya agreed
+with the oracle on all 1,925 questions (attacks and dangers) over three games against Planners. On a blind
+map agreement falls to 77%. That isn't Laya misreading: the sentences there rest on guesses about hidden
+ship counts, while the oracle sees the real ones. Better estimates of hidden garrisons would close most of
+that gap.
 
 ## Planned architecture
 

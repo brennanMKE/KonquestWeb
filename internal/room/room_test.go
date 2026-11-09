@@ -175,7 +175,7 @@ func TestLobby(t *testing.T) {
 	}
 	alice.send(&proto.AddAI{})
 	l = expect[proto.Lobby](alice)
-	if len(l.Seats) != 3 || l.Seats[2].Kind != proto.KindAI || l.Seats[2].AIKind != proto.AIGreedy || l.Seats[2].Name != "Computer 1" {
+	if len(l.Seats) != 3 || l.Seats[2].Kind != proto.KindAI || l.Seats[2].AIKind != proto.AIPlanner || l.Seats[2].Name != "Computer 1" {
 		t.Fatalf("after add_ai: %+v", l.Seats)
 	}
 

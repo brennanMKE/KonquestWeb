@@ -101,10 +101,10 @@ Computer players follow the approach from [System 1 Arcade](https://github.com/b
 - **The game does the arithmetic; the model judges.** Laya can't count or compare numbers. Each prompt gives conclusions in words: "Planet D is 3 rounds away. It will have about 14 defenders when our fleet arrives, and we can send 30 ships with a weaker kill rate. Is attacking D now a good idea? yes / no".
 - **One short state per question**, sent as a batch per decision.
 - **Options repeat the state's own words.**
-- **Strategy lives in code.** An advisor asks about candidate attacks, threats to own planets and reinforcement needs, then `Decide` turns the answers into fleet orders.
+- **Strategy lives in code.** The planner asks whether each of its planets an enemy could reach is in danger and whether each candidate attack is a good bet, then `Decide` defends (hold and reinforce in time), attacks, and moves spare ships from the rear to the front.
 - **Oracle.** Every question has a correct answer computed from the true game state (e.g. by simulating the battle many times), so decision quality can be measured, as in System1Arcade.
 - **Endpoint.** Same HTTP shape as System1Arcade: `POST {state, questions}` or `{batch}` → `{answers}`, with an optional Bearer token. The server can run Laya locally or call a custom endpoint.
-- **Fallback.** A rule-based player (`Greedy`) works with no model running, and is the baseline to beat.
+- **Fallback.** `Planner` answers the same questions from its own estimates and needs no model; it's the default computer and the System 1 player's fallback. `Greedy` (attack only) remains as a simple baseline.
 - AI players see only their own per-player view, never the full state.
 
 ## Architecture

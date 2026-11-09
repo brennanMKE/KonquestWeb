@@ -39,6 +39,7 @@ const (
 // AI kinds.
 const (
 	AIGreedy  = "greedy"
+	AIPlanner = "planner"
 	AISystem1 = "system1"
 )
 

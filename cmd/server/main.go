@@ -32,12 +32,12 @@ func main() {
 	}
 	log := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level}))
 
-	players := map[string]ai.Player{proto.AIGreedy: ai.Greedy{}}
+	players := map[string]ai.Player{proto.AIPlanner: ai.Planner{}, proto.AIGreedy: ai.Greedy{}}
 	if *s1URL != "" {
 		players[proto.AISystem1] = &ai.System1{
 			Model:    &ai.Client{URL: *s1URL, APIKey: *s1Key, Batch: *s1Batch},
-			Fallback: ai.Greedy{},
-			OnError:  func(err error) { log.Warn("System 1 model failed; playing Greedy this turn", "err", err) },
+			Fallback: ai.Planner{},
+			OnError:  func(err error) { log.Warn("System 1 model failed; playing Planner this turn", "err", err) },
 		}
 	}
 

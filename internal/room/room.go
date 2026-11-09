@@ -45,9 +45,9 @@ type Options struct {
 	NewSeed func() uint64
 	// Logger receives room logs. Nil uses slog.Default().
 	Logger *slog.Logger
-	// AI lists the computer players hosts can add, by kind. Nil offers only
-	// Greedy. A seat whose kind isn't listed (say, from a saved game) plays
-	// as Greedy.
+	// AI lists the computer players hosts can add, by kind. Nil offers
+	// Planner and Greedy. A seat whose kind isn't listed (say, from a saved
+	// game) plays as Planner.
 	AI map[string]ai.Player
 }
 
@@ -96,7 +96,7 @@ func New(code string, opts Options) *Room {
 		opts.Logger = slog.Default()
 	}
 	if opts.AI == nil {
-		opts.AI = map[string]ai.Player{proto.AIGreedy: ai.Greedy{}}
+		opts.AI = map[string]ai.Player{proto.AIPlanner: ai.Planner{}, proto.AIGreedy: ai.Greedy{}}
 	}
 	r := &Room{
 		code:     code,
@@ -433,7 +433,7 @@ func (r *Room) setSettings(c *Client, ps proto.Settings) {
 
 func (r *Room) aiKind(kind string) (string, bool) {
 	if kind == "" {
-		kind = proto.AIGreedy
+		kind = proto.AIPlanner
 	}
 	_, ok := r.opts.AI[kind]
 	return kind, ok
@@ -673,7 +673,7 @@ func (r *Room) runAI() {
 	}
 	p, ok := r.opts.AI[s.aiKind]
 	if !ok {
-		p = ai.Greedy{}
+		p = ai.Planner{}
 	}
 	// A model-backed player can take seconds, so it decides on its own
 	// goroutine from a copy of its view; the room keeps serving meanwhile.

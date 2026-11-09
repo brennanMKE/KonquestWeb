@@ -5,8 +5,12 @@
   import type { Settings } from "./proto";
 
   let link = $derived(`${location.origin}/?room=${store.room}`);
-  let aiKind = $state("greedy");
-  const aiNames: Record<string, string> = { greedy: "Greedy (rules)", system1: "System 1 model" };
+  let aiKind = $state("planner");
+  const aiNames: Record<string, string> = {
+    planner: "Planner (rules)",
+    greedy: "Greedy (simple)",
+    system1: "System 1 model",
+  };
   let copied = $state(false);
 
   // The host edits a draft; changes go to the server, which validates and
@@ -83,7 +87,7 @@
           <span class="name">{s.name}</span>
           {#if s.seat === store.seat}<span class="badge">you</span>{/if}
           {#if s.seat === store.host}<span class="badge">host</span>{/if}
-          {#if s.kind === "ai"}<span class="badge">{s.aiKind === "system1" ? "System 1" : "computer"}</span>{/if}
+          {#if s.kind === "ai"}<span class="badge">{aiNames[s.aiKind ?? ""]?.replace(/ \(.*\)$/, "") ?? "computer"}</span>{/if}
           {#if !s.connected}<span class="badge warn">away</span>{/if}
           {#if store.isHost && s.seat !== store.host}
             <button class="small" onclick={() => store.send({ type: "remove_seat", seat: s.seat })}>Remove</button>

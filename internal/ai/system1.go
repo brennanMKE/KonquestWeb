@@ -78,13 +78,11 @@ type Candidate struct {
 
 // Tuning for candidate generation.
 const (
-	targetWin        = 0.85 // send enough ships for this win chance, if we can
-	perSource        = 3    // candidates per source planet
-	maxCandidates    = 10   // candidates per decision (states per batch)
-	goodWin          = 0.75 // the oracle's bar for a good attack
-	maxGoodTurns     = 8    // and for how far it may travel
-	maxTableAttacker = 400
-	maxTableDefender = 400
+	targetWin     = 0.85 // send enough ships for this win chance, if we can
+	perSource     = 3    // candidates per source planet
+	maxCandidates = 10   // candidates per decision (states per batch)
+	goodWin       = 0.75 // the oracle's bar for a good attack
+	maxGoodTurns  = 8    // and for how far it may travel
 )
 
 // Candidates lists the attacks worth asking about, from seat's view.
@@ -109,12 +107,8 @@ func Candidates(v rules.View) []Candidate {
 			}
 			turns := rules.TravelTurns(src.Pos, t.Pos, v.Settings.ShipSpeed)
 			def, defKill := defendersAtArrival(t, turns)
-			tab := rules.NewWinTable(min(spare, maxTableAttacker), *src.Kill, min(def, maxTableDefender), defKill)
-			ships := tab.ShipsFor(def, targetWin)
-			if ships < 0 {
-				ships = spare
-			}
-			win := tab.Win(ships, def)
+			ships := shipsToWin(spare, *src.Kill, def, defKill, targetWin)
+			win := winChance(ships, *src.Kill, def, defKill)
 			c := Candidate{From: src.ID, To: t.ID, Ships: ships, Turns: turns, Win: win}
 			c.State = describe(v, src, t, c)
 			mine = append(mine, scored{c, win * float64(production(t)) / float64(turns+2)})
@@ -207,61 +201,28 @@ func arrivalWords(turns int) string {
 	}
 }
 
-// BuildPrompt batches one state per candidate.
-func BuildPrompt(cands []Candidate) Prompt {
-	p := Prompt{Batch: map[string]Prompt{}}
-	for _, c := range cands {
-		p.Batch[c.Key] = Prompt{State: c.State, Questions: map[string]Question{"move": moveQuestion}}
-	}
-	return p
-}
-
-// OracleAnswers answers every candidate's question from the true state: an
+// attackTruth answers a candidate's move question from the true state: an
 // attack is good if, against the real garrison, it wins at least goodWin of
 // the time and arrives within maxGoodTurns rounds.
-func OracleAnswers(st rules.State, cands []Candidate) Answers {
-	out := Answers{}
-	for _, c := range cands {
-		t, src := st.Planets[c.To], st.Planets[c.From]
-		growth := rules.NeutralGrowth
-		if t.Owner != rules.Neutral {
-			growth = t.Production
-		}
-		def := t.Ships + growth*(c.Turns-1)
-		win := rules.WinProbability(c.Ships, src.Kill, def, t.Kill)
-		choice := "bad"
-		if win >= goodWin && c.Turns <= maxGoodTurns {
-			choice = "good"
-		}
-		out[c.Key+".move"] = Answer{Type: "choice", Choice: choice, Probabilities: map[string]float64{choice: 1}}
+func attackTruth(st rules.State, c Candidate) string {
+	t, src := st.Planets[c.To], st.Planets[c.From]
+	growth := rules.NeutralGrowth
+	if t.Owner != rules.Neutral {
+		growth = t.Production
 	}
-	return out
+	def := t.Ships + growth*(c.Turns-1)
+	if winChance(c.Ships, src.Kill, def, t.Kill) >= goodWin && c.Turns <= maxGoodTurns {
+		return "good"
+	}
+	return "bad"
 }
 
-// Decide turns answers into orders: the attacks the model most believes are
-// good, at most one per target, while the source still has the ships.
-func Decide(v rules.View, cands []Candidate, ans Answers) []Order {
-	spare := map[int]int{}
-	for _, p := range v.Planets {
-		if p.Owner == v.Seat && p.Ships != nil {
-			spare[p.ID] = *p.Ships - reserve(p)
-		}
+// attackGuess answers from the player's own estimates.
+func attackGuess(c Candidate) string {
+	if c.Win >= goodWin && c.Turns <= maxGoodTurns {
+		return "good"
 	}
-	ranked := slices.Clone(cands)
-	slices.SortStableFunc(ranked, func(a, b Candidate) int {
-		return cmp.Compare(ans[b.Key+".move"].good(), ans[a.Key+".move"].good())
-	})
-	taken := map[int]bool{}
-	var orders []Order
-	for _, c := range ranked {
-		if ans[c.Key+".move"].good() <= 0.5 || taken[c.To] || spare[c.From] < c.Ships {
-			continue
-		}
-		orders = append(orders, Order{From: c.From, To: c.To, Ships: c.Ships})
-		spare[c.From] -= c.Ships
-		taken[c.To] = true
-	}
-	return orders
+	return "bad"
 }
 
 // Asker answers a prompt; *Client is the HTTP implementation.
@@ -269,8 +230,10 @@ type Asker interface {
 	Ask(ctx context.Context, p Prompt) (Answers, error)
 }
 
-// System1 is a computer player that asks a System 1 model about each
-// candidate attack. If the model can't be reached it plays as Fallback.
+// System1 is a computer player that asks a System 1 model the planner's
+// questions (is each planet in danger, is each attack a good bet) and plays
+// the planner's strategy on the model's answers. If the model can't be
+// reached it plays as Fallback.
 type System1 struct {
 	Model    Asker
 	Fallback Player
@@ -285,9 +248,9 @@ func (s *System1) Name() string { return "System 1" }
 
 // Orders implements Player.
 func (s *System1) Orders(v rules.View) []Order {
-	cands := Candidates(v)
-	if len(cands) == 0 {
-		return nil
+	sit := Assess(v)
+	if sit.Empty() {
+		return Decide(sit, Answers{})
 	}
 	timeout := s.Timeout
 	if timeout == 0 {
@@ -295,7 +258,7 @@ func (s *System1) Orders(v rules.View) []Order {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
-	ans, err := s.Model.Ask(ctx, BuildPrompt(cands))
+	ans, err := s.Model.Ask(ctx, sit.Prompt())
 	if err != nil {
 		if s.OnError != nil {
 			s.OnError(err)
@@ -305,11 +268,11 @@ func (s *System1) Orders(v rules.View) []Order {
 		}
 		return nil
 	}
-	return Decide(v, cands, ans)
+	return Decide(sit, ans)
 }
 
-// Oracle plays with perfect answers to its own questions. It reads the true
-// state, so it's for measuring (cmd/sim), never for rooms.
+// Oracle plays the planner's strategy with perfect answers. It reads the
+// true state, so it's for measuring (cmd/sim), never for rooms.
 type Oracle struct {
 	Game *rules.Game
 }
@@ -319,6 +282,6 @@ func (o Oracle) Name() string { return "Oracle" }
 
 // Orders implements Player.
 func (o Oracle) Orders(v rules.View) []Order {
-	cands := Candidates(v)
-	return Decide(v, cands, OracleAnswers(o.Game.State(), cands))
+	sit := Assess(v)
+	return Decide(sit, OracleAnswers(o.Game.State(), sit))
 }

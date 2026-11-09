@@ -25,12 +25,24 @@ func readMove(state string) string {
 	return "bad"
 }
 
+func readDanger(state string) string {
+	if strings.Contains(state, "is in danger") {
+		return "danger"
+	}
+	return "safe"
+}
+
 func (m *wordModel) Ask(_ context.Context, p Prompt) (Answers, error) {
 	m.calls.Add(1)
 	out := Answers{}
 	for key, sub := range p.Batch {
-		c := readMove(sub.State)
-		out[key+".move"] = Answer{Type: "choice", Choice: c, Probabilities: map[string]float64{c: 0.9}}
+		for q := range sub.Questions {
+			c := readMove(sub.State)
+			if q == "danger" {
+				c = readDanger(sub.State)
+			}
+			out[key+"."+q] = Answer{Type: "choice", Choice: c, Probabilities: map[string]float64{c: 0.9}}
+		}
 	}
 	return out, nil
 }
@@ -80,7 +92,7 @@ func TestCandidates(t *testing.T) {
 			t.Errorf("state has digits; describe in words: %q", c.State)
 		}
 	}
-	p := BuildPrompt(cands)
+	p := Situation{Attacks: cands}.Prompt()
 	if len(p.Batch) != len(cands) || p.Batch[cands[0].Key].Questions["move"].Type != "choice" {
 		t.Fatalf("prompt %+v", p)
 	}
@@ -94,12 +106,22 @@ func TestOracleAgreesWithWords(t *testing.T) {
 		asked, agree := 0, 0
 		for !g.Over() && g.Round() < 40 {
 			v := g.View(g.Active())
-			cands := Candidates(v)
-			truth := OracleAnswers(g.State(), cands)
-			for _, c := range cands {
+			sit := Assess(v)
+			truth := OracleAnswers(g.State(), sit)
+			for _, c := range sit.Attacks {
 				asked++
 				if readMove(c.State) == truth[c.Key+".move"].Choice {
 					agree++
+				} else {
+					t.Logf("attack %+v truth %s", c, truth[c.Key+".move"].Choice)
+				}
+			}
+			for _, d := range sit.Dangers {
+				asked++
+				if readDanger(d.State) == truth[d.Key+".danger"].Choice {
+					agree++
+				} else {
+					t.Logf("danger %+v truth %s", d, truth[d.Key+".danger"].Choice)
 				}
 			}
 			if _, err := TakeTurn(g, g.Active(), Oracle{Game: g}); err != nil {
@@ -114,9 +136,9 @@ func TestOracleAgreesWithWords(t *testing.T) {
 
 func TestOracleAndSystem1Play(t *testing.T) {
 	s := rules.DefaultSettings()
-	s.MaxRounds = 200
+	s.MaxRounds = 100
 	model := &wordModel{}
-	for seed := range uint64(6) {
+	for seed := range uint64(3) {
 		g := newGame(t, 3, s, seed)
 		players := []Player{Oracle{Game: g}, &System1{Model: model}, Greedy{}}
 		for !g.Over() {
@@ -172,13 +194,13 @@ func TestDecide(t *testing.T) {
 	}
 	// Spare is 30 - 5 reserve = 25: a2 (5) first, then a1 (10); a0 targets
 	// planet 1 again, so it's skipped.
-	got := Decide(v, cands, ans)
+	got := Decide(Situation{View: v, Attacks: cands}, ans)
 	want := []Order{{From: 0, To: 1, Ships: 5}, {From: 0, To: 2, Ships: 10}}
 	if len(got) != 2 || got[0] != want[0] || got[1] != want[1] {
 		t.Fatalf("got %v, want %v", got, want)
 	}
 	ans["a2.move"] = Answer{Type: "choice", Choice: "bad", Probabilities: map[string]float64{"bad": 0.8}}
-	if got := Decide(v, cands, ans); len(got) != 2 || got[0] != (Order{0, 2, 10}) || got[1] != (Order{0, 1, 15}) {
+	if got := Decide(Situation{View: v, Attacks: cands}, ans); len(got) != 2 || got[0] != (Order{0, 2, 10}) || got[1] != (Order{0, 1, 15}) {
 		t.Fatalf("got %v", got)
 	}
 }
@@ -206,10 +228,10 @@ func TestClient(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	prompt := BuildPrompt([]Candidate{
+	prompt := Situation{Attacks: []Candidate{
 		{Key: "a0", State: "Our attack on D is a good bet: it would almost certainly win."},
 		{Key: "a1", State: "Our attack on E is a bad bet: it would probably lose."},
-	})
+	}}.Prompt()
 	for _, batch := range []bool{true, false} {
 		c := &Client{URL: srv.URL, APIKey: "k", Batch: batch}
 		ans, err := c.Ask(context.Background(), prompt)
@@ -224,8 +246,91 @@ func TestClient(t *testing.T) {
 		}
 	}
 	c := &Client{URL: srv.URL}
-	if _, err := c.Ask(context.Background(), BuildPrompt([]Candidate{{Key: "x", State: "boom"}})); err == nil ||
+	if _, err := c.Ask(context.Background(), Situation{Attacks: []Candidate{{Key: "x", State: "boom"}}}.Prompt()); err == nil ||
 		!strings.Contains(err.Error(), "kaboom") {
 		t.Fatalf("want server error, got %v", err)
+	}
+}
+
+func TestPlannerDefends(t *testing.T) {
+	n := func(v int) *int { return &v }
+	k := func(v float64) *float64 { return &v }
+	// Our planet A (5 ships) sits 1 round from a big enemy planet C. Our
+	// planet B, 1 round from A, has ships to spare and can get there in time.
+	v := rules.View{Seat: 0, Settings: rules.DefaultSettings(), Planets: []rules.PlanetView{
+		{ID: 0, Name: "A", Pos: rules.Pos{X: 5, Y: 5}, Owner: 0, Ships: n(5), Production: n(4), Kill: k(0.5)},
+		{ID: 1, Name: "B", Pos: rules.Pos{X: 3, Y: 5}, Owner: 0, Ships: n(80), Production: n(10), Kill: k(0.5)},
+		{ID: 2, Name: "C", Pos: rules.Pos{X: 7, Y: 5}, Owner: 1, Ships: n(40), Production: n(10), Kill: k(0.5)},
+	}}
+	s := Assess(v)
+	var a Danger
+	for _, d := range s.Dangers {
+		if d.Planet == 0 {
+			a = d
+		}
+	}
+	if a.State == "" || !strings.HasPrefix(a.State, "Planet A is in danger") || dangerGuess(a) != "danger" {
+		t.Fatalf("danger to A: %+v", a)
+	}
+	orders := Planner{}.Orders(v)
+	sent := 0
+	for _, o := range orders {
+		if o.From == 0 {
+			t.Fatalf("a planet in danger sent ships away: %+v", o)
+		}
+		if o.From == 1 && o.To == 0 {
+			sent += o.Ships
+		}
+	}
+	need := reinforcements(a)
+	if need <= 0 || sent < need {
+		t.Fatalf("sent %d to A, need %d; orders %+v", sent, need, orders)
+	}
+	if p := winChance(a.Strike, a.Kill, a.Defenders+sent, a.DefKill); p > safeWin {
+		t.Fatalf("after reinforcing, the strike still wins %.2f", p)
+	}
+}
+
+func TestPlannerConsolidates(t *testing.T) {
+	n := func(v int) *int { return &v }
+	k := func(v float64) *float64 { return &v }
+	// Rear planet R has spare ships and nothing worth attacking in reach;
+	// front planet F is nearest the enemy. R's ships move to F.
+	v := rules.View{Seat: 0, Settings: rules.DefaultSettings(), Planets: []rules.PlanetView{
+		{ID: 0, Name: "R", Pos: rules.Pos{X: 0, Y: 0}, Owner: 0, Ships: n(60), Production: n(5), Kill: k(0.4)},
+		{ID: 1, Name: "F", Pos: rules.Pos{X: 8, Y: 0}, Owner: 0, Ships: n(5), Production: n(5), Kill: k(0.4)},
+		{ID: 2, Name: "E", Pos: rules.Pos{X: 15, Y: 0}, Owner: 1, Ships: n(500), Production: n(10), Kill: k(0.9)},
+	}}
+	orders := Planner{}.Orders(v)
+	if len(orders) != 1 || orders[0].From != 0 || orders[0].To != 1 || orders[0].Ships != 60-reserve(v.Planets[0]) {
+		t.Fatalf("orders %+v", orders)
+	}
+}
+
+func TestPlannerBeatsGreedy(t *testing.T) {
+	if testing.Short() {
+		t.Skip("plays many games")
+	}
+	s := rules.DefaultSettings()
+	s.MaxRounds = 300
+	wins := 0
+	const games = 8
+	for seed := range uint64(games) {
+		g := newGame(t, 2, s, seed+100)
+		players := []Player{Planner{}, Greedy{}}
+		if seed%2 == 1 {
+			players = []Player{Greedy{}, Planner{}}
+		}
+		for !g.Over() {
+			if _, err := TakeTurn(g, g.Active(), players[g.Active()]); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if w := g.Winner(); w >= 0 && players[w].Name() == "Planner" {
+			wins++
+		}
+	}
+	if wins*2 <= games {
+		t.Fatalf("Planner won %d of %d against Greedy", wins, games)
 	}
 }

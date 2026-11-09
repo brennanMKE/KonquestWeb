@@ -364,20 +364,29 @@
   });
 
   async function runReplay(events: GameEvent[]) {
-    const battles = events
-      .filter((e) => (e.kind === "captured" || e.kind === "held") && e.planet >= 0)
-      // Our own battles first, then the biggest.
-      .sort((a, b) => Number(involves(b)) - Number(involves(a)) || b.ships - a.ships)
-      .slice(0, 6);
+    // Battles only: a fleet landing on its own side's planet is a
+    // reinforcement, not a fight. The events come in the order they
+    // happened, which matters when one planet changes hands several times in
+    // a round.
+    const all = events.filter(
+      (e) => (e.kind === "captured" || e.kind === "held") && e.planet >= 0 && e.attacker !== e.defender,
+    );
+    // Show the most important few (ours first, then the biggest), but play
+    // them in the order they happened.
+    const chosen = new Set(
+      [...all].sort((a, b) => Number(involves(b)) - Number(involves(a)) || b.ships - a.ships).slice(0, 6),
+    );
+    const battles = all.filter((e) => chosen.has(e));
     if (!battles.length) {
       play(...events.map((e) => soundFor(e, seat)).filter((s) => s !== null));
       return;
     }
     replaying = true;
     skip = false;
-    // Show every battled planet as it was before the round.
+    // Show every planet that changed hands as it was before the round: the
+    // defender of its first battle.
     const before = new Map<number, number>();
-    for (const e of [...battles].reverse()) if (e.kind === "captured") before.set(e.planet, e.defender);
+    for (const e of all) if (!before.has(e.planet)) before.set(e.planet, e.defender);
     shownOwner = before;
     const home = { pos: camera.position.clone(), target: controls.target.clone(), up: camera.up.clone() };
     for (const e of battles) {
@@ -402,6 +411,8 @@
   // then the planet changes hands (or rings, if it held).
   async function battle(e: GameEvent) {
     const at = toWorld(planets[e.planet]);
+    // The planet shows whoever held it when this fleet arrived.
+    shownOwner = new Map(shownOwner).set(e.planet, e.defender);
     const attackColor = new THREE.Color(ownerHex(e.attacker));
     const ships = Math.min(10, Math.max(2, Math.round(Math.sqrt(e.ships))));
     const cone = new THREE.ConeGeometry(0.1 * unit, 0.3 * unit, 10);
@@ -434,11 +445,7 @@
     }
 
     // Outcome.
-    if (e.kind === "captured") {
-      const next = new Map(shownOwner);
-      next.delete(e.planet);
-      shownOwner = next;
-    }
+    if (e.kind === "captured") shownOwner = new Map(shownOwner).set(e.planet, e.attacker);
     ring(at, new THREE.Color(ownerHex(e.kind === "captured" ? e.attacker : e.defender)));
     const s = soundFor(e, seat);
     if (s) play(s);

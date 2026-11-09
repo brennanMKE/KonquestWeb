@@ -26,6 +26,8 @@
     onhover?: (id: number | null) => void;
     /** The last round's events; each new round's battles are replayed. */
     replay?: { round: number; events: GameEvent[] } | null;
+    /** Called when a round's replay has finished (or had nothing to show). */
+    onreplaydone?: () => void;
   }
 
   let {
@@ -42,6 +44,7 @@
     onpick,
     onhover,
     replay = null,
+    onreplaydone,
   }: Props = $props();
 
   // A shallow map spreads its few layers apart so height reads clearly; a
@@ -380,6 +383,7 @@
     const battles = all.filter((e) => chosen.has(e));
     if (!battles.length) {
       play(...events.map((e) => soundFor(e, seat)).filter((s) => s !== null));
+      onreplaydone?.();
       return;
     }
     replaying = true;
@@ -405,6 +409,7 @@
     }
     await flyTo(home.pos, home.target, home.up, 600);
     replaying = false;
+    onreplaydone?.();
   }
 
   const involves = (e: GameEvent) => e.attacker === seat || e.defender === seat || seat === -2;

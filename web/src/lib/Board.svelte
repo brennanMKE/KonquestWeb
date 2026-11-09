@@ -19,6 +19,7 @@
     onhover?: (id: number | null) => void;
     /** Battle replays are a 3D view feature; the map ignores this. */
     replay?: { round: number; events: GameEvent[] } | null;
+    onreplaydone?: () => void;
   }
 
   let {

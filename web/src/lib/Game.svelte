@@ -43,6 +43,8 @@
   }
   $effect(() => {
     store.replays = view3d && replays;
+    // Leaving the 3D view (or turning replays off) ends any wait for one.
+    if (!store.replays && store.replayPending) store.replayDone();
   });
 
   // Turn timer countdown.
@@ -217,6 +219,7 @@
           onpick={pick}
           onhover={(id) => (hover = id)}
           replay={replays ? store.lastEvents : null}
+          onreplaydone={() => store.replayDone()}
         />
       {/snippet}
       {#if board3d}
@@ -358,7 +361,7 @@
     </aside>
   </main>
 
-  {#if store.standings}
+  {#if store.standings && !store.replayPending}
     <div class="over">
       <div class="card">
         <h2>

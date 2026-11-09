@@ -72,6 +72,23 @@ class Store {
   lastEvents = $state<{ round: number; events: GameEvent[] } | null>(null);
   /** Set while the 3D board replays battles; it plays their sounds then. */
   replays = false;
+  /**
+   * True from a round's result until the board has replayed its battles.
+   * The game-over screen and sound wait for it, so the final battle plays
+   * first.
+   */
+  replayPending = $state(false);
+  private afterReplay: (() => void) | null = null;
+  private replayFallback = 0;
+
+  /** The board calls this when it has finished replaying a round. */
+  replayDone() {
+    clearTimeout(this.replayFallback);
+    this.replayPending = false;
+    const f = this.afterReplay;
+    this.afterReplay = null;
+    f?.();
+  }
 
   private ws: WebSocket | null = null;
   private name = "";
@@ -191,12 +208,22 @@ class Store {
         // A replaying board plays each battle's sound as its battle ends.
         if (!this.replays) play(...m.events.map((e) => soundFor(e, this.seat)).filter((s): s is Sound => s !== null));
         this.lastEvents = { round: m.round, events: m.events };
+        if (this.replays) {
+          this.replayPending = true;
+          // Never wait forever, say if the 3D view failed to load.
+          clearTimeout(this.replayFallback);
+          this.replayFallback = window.setTimeout(() => this.replayDone(), 30_000);
+        }
         break;
       case "seat_status":
         if (this.seats[m.seat]) this.seats[m.seat].connected = m.connected;
         break;
       case "game_over":
-        if (this.phase !== "over") play(m.winner === this.seat ? "win" : "gameover");
+        if (this.phase !== "over") {
+          const sound = () => play(m.winner === this.seat ? "win" : "gameover");
+          if (this.replayPending) this.afterReplay = sound;
+          else sound();
+        }
         this.standings = m.standings;
         this.winner = m.winner;
         this.phase = "over";

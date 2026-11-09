@@ -2,6 +2,7 @@
   import type { Fleet, PlanetView } from "./proto";
   import { travelTurns } from "./proto";
   import { ownerColor } from "./colors";
+  import { territory } from "./territory";
 
   interface Props {
     planets: PlanetView[];
@@ -39,6 +40,17 @@
   const cy = (p: PlanetView) => p.pos.y + 0.5;
   // 2.5D: on a deep map, higher layers draw larger and carry a z label.
   const radius = (p: PlanetView) => (depth > 1 ? 0.27 + (0.1 * p.pos.z) / (depth - 1) : 0.32);
+
+  // Territory, seen from above: on a flat map each cell; on a deep map each
+  // column, by the nearest planet in the flattened map.
+  let regions = $derived(
+    territory(
+      planets.map((p) => ({ ...p, pos: { ...p.pos, z: 0 } })),
+      width,
+      height,
+      1,
+    ),
+  );
 
   // Draw lower layers first so higher planets sit on top.
   let ordered = $derived([...planets].sort((a, b) => a.pos.z - b.pos.z));
@@ -78,6 +90,11 @@
       <path d="M 1 0 L 0 0 0 1" fill="none" stroke="var(--grid)" stroke-width="0.02" />
     </pattern>
   </defs>
+  <g class="territory">
+    {#each regions as b (`${b.x},${b.y}`)}
+      <rect x={b.x} y={b.y} width={b.size} height={b.size} fill={ownerColor(b.owner)} />
+    {/each}
+  </g>
   <rect x="0" y="0" {width} {height} fill="url(#grid)" stroke="var(--grid)" stroke-width="0.04" />
 
   {#each fleets as f (f.id)}
@@ -145,6 +162,10 @@
     height: 100%;
     display: block;
     user-select: none;
+  }
+  .territory rect {
+    opacity: 0.13;
+    transition: fill 0.6s ease;
   }
   .planet {
     cursor: pointer;

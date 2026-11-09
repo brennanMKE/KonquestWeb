@@ -6,6 +6,7 @@
   import type { Fleet, PlanetView } from "./proto";
   import { travelTurns } from "./proto";
   import { ownerHex } from "./colors";
+  import { territory } from "./territory";
 
   // Same props as Board.svelte, so the game can swap views.
   interface Props {
@@ -61,6 +62,7 @@
 
   const sphere = new THREE.SphereGeometry(1, 24, 16);
   const floorDot = new THREE.CircleGeometry(0.12, 16).rotateX(-Math.PI / 2);
+  const box = new THREE.BoxGeometry(1, 1, 1);
 
   function toWorld(p: PlanetView): THREE.Vector3 {
     return new THREE.Vector3(
@@ -90,7 +92,7 @@
       const m = (o as THREE.Mesh).material as THREE.Material | THREE.Material[] | undefined;
       if (m) (Array.isArray(m) ? m : [m]).forEach((x) => x.dispose());
       const g = (o as THREE.Mesh).geometry as THREE.BufferGeometry | undefined;
-      if (g && g !== sphere && g !== floorDot) g.dispose();
+      if (g && g !== sphere && g !== floorDot && g !== box) g.dispose();
     });
   }
 
@@ -182,6 +184,37 @@
       const tag = label(p.ships !== undefined ? `${p.name} ${p.ships}` : p.name, p.owner === seat ? "tag mine" : "tag");
       tag.position.copy(at);
       dynamic.add(tag);
+    }
+
+    // Territory: translucent tinted blocks, one instanced mesh per owner, so
+    // each empire reads as a coloured cloud with pockets where it has pushed
+    // into another's space.
+    const byOwner = new Map<number, ReturnType<typeof territory>>();
+    for (const b of territory(planets, width, height, depth)) {
+      if (!byOwner.has(b.owner)) byOwner.set(b.owner, []);
+      byOwner.get(b.owner)!.push(b);
+    }
+    const m = new THREE.Matrix4();
+    for (const [owner, blocks] of byOwner) {
+      const mat = new THREE.MeshBasicMaterial({
+        color: new THREE.Color(ownerHex(owner)),
+        transparent: true,
+        opacity: depth > 1 ? 0.045 : 0.12,
+        depthWrite: false,
+      });
+      const mesh = new THREE.InstancedMesh(box, mat, blocks.length);
+      blocks.forEach((b, i) => {
+        const h = b.depth * layerGap;
+        m.makeScale(b.size * 0.98, h * 0.98, b.size * 0.98);
+        m.setPosition(
+          b.x + b.size / 2 - width / 2,
+          (b.z + b.depth / 2) * layerGap - ((depth - 1) * layerGap) / 2 - layerGap / 2,
+          b.y + b.size / 2 - height / 2,
+        );
+        mesh.setMatrixAt(i, m);
+      });
+      mesh.renderOrder = -1;
+      dynamic.add(mesh);
     }
 
     for (const f of fleets) {
@@ -338,6 +371,7 @@
       renderer.dispose();
       sphere.dispose();
       floorDot.dispose();
+      box.dispose();
       host.replaceChildren();
     };
   });

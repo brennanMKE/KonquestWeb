@@ -219,7 +219,7 @@
           onpick={pick}
           onhover={(id) => (hover = id)}
           replay={replays ? store.lastEvents : null}
-          onreplaydone={() => store.replayDone()}
+          onreplaydone={(round) => store.replayDone(round)}
         />
       {/snippet}
       {#if board3d}

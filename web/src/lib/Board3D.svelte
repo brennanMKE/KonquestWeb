@@ -27,7 +27,7 @@
     /** The last round's events; each new round's battles are replayed. */
     replay?: { round: number; events: GameEvent[] } | null;
     /** Called when a round's replay has finished (or had nothing to show). */
-    onreplaydone?: () => void;
+    onreplaydone?: (round: number) => void;
   }
 
   let {
@@ -374,15 +374,41 @@
 
   const wait = (ms: number) => new Promise<void>((r) => setTimeout(r, skip ? 0 : ms));
 
+  // Rounds replay one at a time, in order. If a newer round is waiting, the
+  // one playing hurries to its end so the view keeps up with the game.
+  let queue: { round: number; events: GameEvent[] }[] = [];
+  /** The last round fully replayed (shown as data-replayed, for tests). */
+  let doneRound = $state(0);
+  // The scene is set up asynchronously; a round that arrived before it was
+  // ready still replays once it is.
+  let ready = $state(false);
   $effect(() => {
-    if (replay && replay.round !== replayed && renderer) {
+    if (replay && replay.round !== replayed && ready) {
       replayed = replay.round;
       noteInput();
-      runReplay(replay.events);
+      queue.push(replay);
+      if (replaying) skip = true;
+      else drain();
     }
   });
 
-  async function runReplay(events: GameEvent[]) {
+  async function drain() {
+    replaying = true;
+    const home = { pos: camera.position.clone(), target: controls.target.clone(), up: camera.up.clone() };
+    let moved = false;
+    while (queue.length) {
+      const r = queue.shift()!;
+      moved = (await runReplay(r.events)) || moved;
+      doneRound = r.round;
+      onreplaydone?.(r.round);
+    }
+    if (moved) await flyTo(home.pos, home.target, home.up, 600);
+    lastInput = performance.now(); // a lull starts after the replays
+    replaying = false;
+  }
+
+  // Replays one round's battles; reports whether it moved the camera.
+  async function runReplay(events: GameEvent[]): Promise<boolean> {
     // Battles only: a fleet landing on its own side's planet is a
     // reinforcement, not a fight. The events come in the order they
     // happened, which matters when one planet changes hands several times in
@@ -398,17 +424,14 @@
     const battles = all.filter((e) => chosen.has(e));
     if (!battles.length) {
       play(...events.map((e) => soundFor(e, seat)).filter((s) => s !== null));
-      onreplaydone?.();
-      return;
+      return false;
     }
-    replaying = true;
     skip = false;
     // Show every planet that changed hands as it was before the round: the
     // defender of its first battle.
     const before = new Map<number, number>();
     for (const e of all) if (!before.has(e.planet)) before.set(e.planet, e.defender);
     shownOwner = before;
-    const home = { pos: camera.position.clone(), target: controls.target.clone(), up: camera.up.clone() };
     // One camera move for the whole round: frame every battle, then play
     // them in place, in the order they happened.
     await frameAll([...new Set(battles.map((e) => e.planet))]);
@@ -416,7 +439,6 @@
       if (skip) break;
       await battle(e);
     }
-    lastInput = performance.now(); // a lull starts after the replay
     shownOwner = new Map();
     for (const a of anims) a(Infinity);
     anims = [];
@@ -424,9 +446,7 @@
       play(...events.map((e) => soundFor(e, seat)).filter((s) => s !== null));
       skip = false;
     }
-    await flyTo(home.pos, home.target, home.up, 600);
-    replaying = false;
-    onreplaydone?.();
+    return true;
   }
 
   const involves = (e: GameEvent) => e.attacker === seat || e.defender === seat || seat === -2;
@@ -612,6 +632,7 @@
     };
     resetView();
     rebuild();
+    ready = true;
 
     let down: { x: number; y: number } | null = null;
     const el = renderer.domElement;
@@ -700,7 +721,7 @@
   });
 </script>
 
-<div class="board3d" bind:this={host} data-testid="board-3d">
+<div class="board3d" bind:this={host} data-testid="board-3d" data-replayed={doneRound}>
   {#if webgl}
     <div class="views" role="toolbar" aria-label="Camera">
       {#each Object.keys(presets) as name (name)}

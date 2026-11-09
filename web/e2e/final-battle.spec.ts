@@ -26,4 +26,8 @@ test("the final scores wait for the last round's battle replay", async ({ page }
     await page.waitForTimeout(100);
   }
   await expect(replaying).toHaveCount(0);
+  // The board had finished replaying the final round itself, not just an
+  // earlier one.
+  const finalRound = Number((await page.getByText(/^Round \d+/).first().innerText()).match(/\d+/)![0]);
+  await expect(page.getByTestId("board-3d")).toHaveAttribute("data-replayed", String(finalRound));
 });

@@ -78,11 +78,18 @@ class Store {
    * first.
    */
   replayPending = $state(false);
+  /** The latest round waiting for its replay. */
+  private pendingRound = 0;
   private afterReplay: (() => void) | null = null;
   private replayFallback = 0;
 
-  /** The board calls this when it has finished replaying a round. */
-  replayDone() {
+  /**
+   * The board calls this when it has replayed a round. Only the latest
+   * round's replay ends the wait: an earlier round finishing must not
+   * release the final scores while the last battles still play.
+   */
+  replayDone(round = Infinity) {
+    if (round < this.pendingRound) return;
     clearTimeout(this.replayFallback);
     this.replayPending = false;
     const f = this.afterReplay;
@@ -212,9 +219,10 @@ class Store {
         this.lastEvents = { round: m.round, events: m.events };
         if (this.replays) {
           this.replayPending = true;
+          this.pendingRound = m.round;
           // Never wait forever, say if the 3D view failed to load.
           clearTimeout(this.replayFallback);
-          this.replayFallback = window.setTimeout(() => this.replayDone(), 30_000);
+          this.replayFallback = window.setTimeout(() => this.replayDone(), 60_000);
         }
         break;
       case "seat_status":

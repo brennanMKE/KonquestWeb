@@ -243,6 +243,9 @@ type System1 struct {
 	OnError func(error)
 	// OnAnswer, if set, hears about each request the model answered.
 	OnAnswer func()
+	// Ready, if set and false, skips the model and plays Fallback at once,
+	// say while a health check finds it down.
+	Ready func() bool
 }
 
 // Name implements Player.
@@ -253,6 +256,9 @@ func (s *System1) Orders(v rules.View) []Order {
 	sit := Assess(v)
 	if sit.Empty() {
 		return Decide(sit, Answers{})
+	}
+	if s.Ready != nil && !s.Ready() && s.Fallback != nil {
+		return s.Fallback.Orders(v)
 	}
 	timeout := s.Timeout
 	if timeout == 0 {

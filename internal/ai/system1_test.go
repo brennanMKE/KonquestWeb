@@ -172,6 +172,12 @@ func TestSystem1FallsBack(t *testing.T) {
 	if (&System1{Model: failingModel{}}).Orders(v) != nil {
 		t.Fatal("no fallback should give no orders")
 	}
+	// While the model is known to be down it isn't asked at all.
+	errs = 0
+	p.Ready = func() bool { return false }
+	if got := p.Orders(v); errs != 0 || len(got) != len(want) {
+		t.Fatalf("not ready: errs %d, orders %v want %v", errs, got, want)
+	}
 }
 
 func TestDecide(t *testing.T) {

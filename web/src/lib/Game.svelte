@@ -2,6 +2,7 @@
   import { load, save, store } from "./store.svelte";
   import { setSound, soundOn, unlockAudio } from "./audio";
   import { ownerColor } from "./colors";
+  import { playerType } from "./proto";
   import { orders } from "./orders.svelte";
   import { popOut, type Popout } from "./popout";
   import Board from "./Board.svelte";
@@ -205,13 +206,14 @@
         </h2>
         <table>
           <thead>
-            <tr><th>#</th><th>Player</th><th>Planets</th><th>Ships</th><th>Built</th><th>Destroyed</th><th>Lost</th><th>Conquered</th></tr>
+            <tr><th>#</th><th>Player</th><th>Type</th><th>Planets</th><th>Ships</th><th>Built</th><th>Destroyed</th><th>Lost</th><th>Conquered</th></tr>
           </thead>
           <tbody>
             {#each store.standings as s (s.seat)}
               <tr>
                 <td>{s.rank}</td>
                 <td><span class="dot" style:background={ownerColor(s.seat)}></span> {store.playerName(s.seat)}</td>
+                <td class="type">{playerType(store.seats.find((x) => x.seat === s.seat))}</td>
                 <td>{s.planets}</td>
                 <td>{s.ships}</td>
                 <td>{s.stats.shipsBuilt}</td>
@@ -398,8 +400,13 @@
     white-space: nowrap;
   }
   th:nth-child(2),
-  td:nth-child(2) {
+  td:nth-child(2),
+  th:nth-child(3),
+  td:nth-child(3) {
     text-align: left;
+  }
+  td.type {
+    color: var(--muted);
   }
   th {
     color: var(--muted);

@@ -27,6 +27,9 @@ test("the final scores wait for the last round's battle replay", async ({ page }
     await page.waitForTimeout(100);
   }
   await expect(replaying).toHaveCount(0);
+  // Each row says which kind of computer played it.
+  await expect(page.locator(".over td.type")).toHaveCount(3);
+  await expect(page.locator(".over td.type").first()).not.toHaveText("");
   // The board had finished replaying the final round itself, not just an
   // earlier one.
   const finalRound = Number((await page.getByText(/^Round \d+/).first().innerText()).match(/\d+/)![0]);

@@ -145,3 +145,17 @@ export function distance(a: Pos, b: Pos): number {
 export function travelTurns(a: Pos, b: Pos, speed: number): number {
   return Math.max(1, Math.ceil(distance(a, b) / speed - 1e-9));
 }
+
+/** Names of the computer player kinds, for menus. */
+export const AI_NAMES: Record<string, string> = {
+  planner: "Planner (rules)",
+  greedy: "Greedy (simple)",
+  system1: "System 1 model",
+};
+
+/** Short name of who plays a seat: a person, or the kind of computer. */
+export function playerType(seat: { kind: string; aiKind?: string } | undefined): string {
+  if (!seat) return "";
+  if (seat.kind !== "ai") return "Person";
+  return AI_NAMES[seat.aiKind ?? ""]?.replace(/ \(.*\)$/, "").replace(/ model$/, "") ?? "Computer";
+}

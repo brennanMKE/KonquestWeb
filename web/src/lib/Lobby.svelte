@@ -3,7 +3,7 @@
   import { unlockAudio } from "./audio";
   import { ownerColor } from "./colors";
   import Board from "./Board.svelte";
-  import type { Settings } from "./proto";
+  import { AI_NAMES, type Settings } from "./proto";
 
   let link = $derived(`${location.origin}/?room=${store.room}`);
   // The server lists its default kind first.
@@ -11,11 +11,7 @@
   // A kind the server stops offering (its model went down) drops back to the
   // default.
   let aiKind = $derived(picked && store.aiKinds.includes(picked) ? picked : (store.aiKinds[0] ?? "planner"));
-  const aiNames: Record<string, string> = {
-    planner: "Planner (rules)",
-    greedy: "Greedy (simple)",
-    system1: "System 1 model",
-  };
+  const aiNames = AI_NAMES;
   let copied = $state(false);
 
   // The host edits a draft; changes go to the server, which validates and

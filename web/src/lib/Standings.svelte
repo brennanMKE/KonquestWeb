@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { SeatInfo, View } from "./proto";
   import { ownerColor } from "./colors";
-  import { SPECTATOR } from "./proto";
+  import { SPECTATOR, playerType } from "./proto";
   import { store } from "./store.svelte";
 
   // Mid-game standings, from the player's own view only: planet counts are
@@ -36,6 +36,7 @@
         <td>
           <span class="dot" style:background={ownerColor(r.s.seat)}></span>
           {r.s.seat === view.seat ? "You" : store.playerName(r.s.seat)}
+          {#if r.s.kind === "ai"}<span class="type">{playerType(r.s)}</span>{/if}
         </td>
         <td>{r.planets}</td>
         <td>{r.production ?? "?"}</td>
@@ -56,6 +57,11 @@
 {/if}
 
 <style>
+  .type {
+    color: var(--muted);
+    font-size: 12px;
+    margin-left: 4px;
+  }
   table {
     width: 100%;
     border-collapse: collapse;

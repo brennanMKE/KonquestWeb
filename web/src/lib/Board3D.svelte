@@ -5,7 +5,7 @@
   import { CSS2DObject, CSS2DRenderer } from "three/examples/jsm/renderers/CSS2DRenderer.js";
   import type { Fleet, GameEvent, PlanetView } from "./proto";
   import { play } from "./audio";
-  import { soundFor } from "./store.svelte";
+  import { load, save, soundFor } from "./store.svelte";
   import { travelTurns } from "./proto";
   import { ownerHex } from "./colors";
   import { territory } from "./territory";
@@ -289,8 +289,26 @@
   } | null = null;
 
   function flyTo(pos: THREE.Vector3, target: THREE.Vector3, up: THREE.Vector3, dur = 700): Promise<void> {
-    return new Promise((done) => {
+    return new Promise((resolve) => {
       move?.done();
+      // Frames can stop (a hidden tab, a stalled headless browser); a replay
+      // waiting on this move must still finish, so a timer ends it too.
+      let finished = false;
+      const done = () => {
+        if (finished) return;
+        finished = true;
+        clearTimeout(timer);
+        resolve();
+      };
+      const timer = setTimeout(() => {
+        if (move?.done !== done) return done();
+        camera.position.copy(move.toPos);
+        controls.target.copy(move.toTarget);
+        camera.up.copy(move.toUp);
+        camera.lookAt(controls.target);
+        move = null;
+        done();
+      }, dur + 1000);
       move = {
         fromPos: camera.position.clone(),
         fromTarget: controls.target.clone(),
@@ -441,7 +459,7 @@
     shownOwner = before;
     // One camera move for the whole round: frame every battle, then play
     // them in place, in the order they happened.
-    await frameAll([...new Set(battles.map((e) => e.planet))]);
+    if (autoCamera) await frameAll([...new Set(battles.map((e) => e.planet))]);
     for (const e of battles) {
       if (skip) break;
       await battle(e);
@@ -453,7 +471,7 @@
       play(...events.map((e) => soundFor(e, seat)).filter((s) => s !== null));
       skip = false;
     }
-    return true;
+    return autoCamera; // only an auto camera moved
   }
 
   const involves = (e: GameEvent) => e.attacker === seat || e.defender === seat || seat === -2;
@@ -550,6 +568,15 @@
 
   // --- Idle drift ---------------------------------------------------------
 
+  // Auto camera: the view backs out and turns in a lull, and swings to each
+  // round's battles. Off, the camera moves only when the player moves it.
+  let autoCamera = $state(load("parallax.autocam") !== "off");
+  function toggleAutoCamera() {
+    autoCamera = !autoCamera;
+    save("parallax.autocam", autoCamera ? "on" : "off");
+    noteInput(); // stops a drift in progress
+  }
+
   // In a lull (no input, no replay, no order being entered) the camera backs
   // out to show the whole map and slowly turns it. Any input stops it where
   // it is.
@@ -569,7 +596,7 @@
   }
 
   function stepIdle(now: number, dt: number) {
-    const lull = !replaying && source === null && dest === null && now - lastInput > idleAfterMs;
+    const lull = autoCamera && !replaying && source === null && dest === null && now - lastInput > idleAfterMs;
     if (!lull) return false;
     if (!idling) {
       idling = true;
@@ -743,6 +770,16 @@
         Arrivals{arrivals.length ? ` (${arrivals.length})` : ""}
       </button>
       <button class="small" onclick={() => resetView()} title="Put the camera back where it started">Reset view</button>
+      <button
+        class="small"
+        onclick={toggleAutoCamera}
+        aria-pressed={autoCamera}
+        title={autoCamera
+          ? "The camera turns the map when idle and swings to battles. Click to keep it still."
+          : "The camera stays where you put it. Click to let it turn the map and follow battles."}
+      >
+        Auto camera {autoCamera ? "on" : "off"}
+      </button>
     </div>
     {#if replaying}
       <p class="replaying">Replaying battles · click or Esc to skip</p>

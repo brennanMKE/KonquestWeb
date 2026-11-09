@@ -42,8 +42,13 @@ test("a cube opens in the 3D view, turns freely and picks planets by mouse and k
   await page.getByLabel("Ships to send").press("Enter");
   await expect(page.getByText(/Fleet of \d+ sent/)).toBeVisible();
 
+  // The camera can be kept still; the choice is remembered.
+  await page.getByRole("button", { name: "Auto camera on" }).click();
+  await expect(page.getByRole("button", { name: "Auto camera off" })).toHaveAttribute("aria-pressed", "false");
+
   // The choice of view survives a reload.
   await page.reload(); // rejoins with the stored seat token
   await expect(page.getByTestId("board-3d").locator("canvas")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Auto camera off" })).toBeVisible();
   expect(errors).toEqual([]);
 });

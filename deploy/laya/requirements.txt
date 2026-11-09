@@ -1,0 +1,11 @@
+# Laya model server for Parallax's System 1 computer players.
+# Versions that served Parallax in testing (Python 3.13/3.14). On Linux
+# without a GPU, install torch from the CPU index first:
+#   pip install torch==2.14.0 --index-url https://download.pytorch.org/whl/cpu
+torch==2.14.0
+laya==0.3.6
+transformers==5.17.0
+tokenizers==0.23.2
+safetensors==0.8.0
+huggingface_hub==1.32.0
+numpy==2.5.3

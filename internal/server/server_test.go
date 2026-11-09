@@ -317,3 +317,31 @@ func TestHealthz(t *testing.T) {
 		t.Fatalf("status %d, want 200", resp.StatusCode)
 	}
 }
+
+func TestOrigins(t *testing.T) {
+	dial := func(ts *httptest.Server, origin string) error {
+		code := createRoom(t, ts)
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		url := "ws" + strings.TrimPrefix(ts.URL, "http") + "/ws?room=" + code
+		conn, _, err := websocket.Dial(ctx, url, &websocket.DialOptions{HTTPHeader: http.Header{"Origin": {origin}}})
+		if err == nil {
+			conn.CloseNow()
+		}
+		return err
+	}
+	quiet := slog.New(slog.NewTextHandler(io.Discard, nil))
+	plain := httptest.NewServer(New(Options{Logger: quiet}))
+	defer plain.Close()
+	if dial(plain, "https://yoyo.example.ts.net") == nil {
+		t.Fatal("a page on another host connected")
+	}
+	proxied := httptest.NewServer(New(Options{Logger: quiet, Origins: []string{"yoyo.example.ts.net"}}))
+	defer proxied.Close()
+	if err := dial(proxied, "https://yoyo.example.ts.net"); err != nil {
+		t.Fatalf("an allowed origin: %v", err)
+	}
+	if dial(proxied, "https://evil.example") == nil {
+		t.Fatal("an unlisted origin connected")
+	}
+}

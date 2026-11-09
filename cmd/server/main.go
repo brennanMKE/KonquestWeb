@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -24,6 +25,7 @@ func main() {
 	s1URL := flag.String("system1", "", `System 1 decision endpoint for computer players, e.g. http://127.0.0.1:8799/predict (off when empty). When set, System 1 is the default computer; while it's unreachable those players play as Planner`)
 	s1Key := flag.String("system1-key", "", "API key for the System 1 endpoint (sent as a Bearer token)")
 	s1Batch := flag.Bool("system1-batch", true, "send several states per request; off sends one request per state")
+	origins := flag.String("origin", "", "comma-separated hosts whose pages may connect, for a proxy that rewrites Host (e.g. yoyo.example.ts.net)")
 	flag.Parse()
 
 	level := slog.LevelInfo
@@ -49,7 +51,7 @@ func main() {
 
 	srv := &http.Server{
 		Addr:              *addr,
-		Handler:           server.New(server.Options{Dev: *dev, Static: static(), Logger: log, Room: room.Options{AI: players, DefaultAI: defaultAI}}),
+		Handler:           server.New(server.Options{Dev: *dev, Origins: splitList(*origins), Static: static(), Logger: log, Room: room.Options{AI: players, DefaultAI: defaultAI}}),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -66,4 +68,15 @@ func main() {
 		log.Error("server", "err", err)
 		os.Exit(1)
 	}
+}
+
+// splitList splits a comma-separated flag, dropping empty entries.
+func splitList(s string) []string {
+	var out []string
+	for _, v := range strings.Split(s, ",") {
+		if v = strings.TrimSpace(v); v != "" {
+			out = append(out, v)
+		}
+	}
+	return out
 }

@@ -23,6 +23,11 @@ type Options struct {
 	// Dev accepts WebSocket connections from any origin, for a frontend dev
 	// server on another port.
 	Dev bool
+	// Origins are extra host patterns (path.Match syntax, e.g.
+	// "yoyo.example.ts.net") whose pages may open WebSockets, for proxies
+	// that don't pass the browser's Host header through. The page's own host
+	// is always allowed.
+	Origins []string
 	// Static serves the built frontend at /. Nil serves a placeholder.
 	Static fs.FS
 	// Room options for every room.
@@ -144,7 +149,7 @@ func (s *Server) websocket(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "no such room", http.StatusNotFound)
 		return
 	}
-	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{InsecureSkipVerify: s.opts.Dev})
+	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{InsecureSkipVerify: s.opts.Dev, OriginPatterns: s.opts.Origins})
 	if err != nil {
 		return // Accept has written the response.
 	}

@@ -1,0 +1,21 @@
+# Normalize line endings
+* text=auto eol=lf
+
+# Windows scripts keep CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Binary assets
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+
+# Generated files: collapse in diffs
+go.sum linguist-generated=true
+web/package-lock.json linguist-generated=true -diff

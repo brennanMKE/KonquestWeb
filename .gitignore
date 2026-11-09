@@ -1,0 +1,40 @@
+# Go
+/bin/
+/dist/
+*.test
+*.out
+coverage.*
+/server
+/sim
+
+# Frontend
+node_modules/
+web/dist/
+*.tsbuildinfo
+npm-debug.log*
+
+# Playwright
+test-results/
+playwright-report/
+
+# Python (System 1 agent)
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+
+# Saved games
+*.game.json
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Editors / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*~
+Thumbs.db

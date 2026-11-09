@@ -581,6 +581,7 @@
   }
   .over {
     position: fixed;
+    z-index: 100;
     inset: 0;
     background: rgb(0 0 0 / 0.6);
     display: flex;

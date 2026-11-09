@@ -50,6 +50,7 @@
   }
   .toast {
     position: fixed;
+    z-index: 200;
     bottom: 24px;
     left: 50%;
     transform: translateX(-50%);

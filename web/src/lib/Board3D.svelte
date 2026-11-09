@@ -763,6 +763,10 @@
 <style>
   .board3d {
     position: relative;
+    /* Labels get large z-indexes for depth sorting; keep them inside the
+       board so dialogs and toasts stay on top. */
+    isolation: isolate;
+    z-index: 0;
     width: 100%;
     height: 100%;
     overflow: hidden;

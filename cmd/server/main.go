@@ -21,7 +21,7 @@ import (
 func main() {
 	addr := flag.String("addr", ":8080", "listen address")
 	dev := flag.Bool("dev", false, "development mode: accept WebSockets from any origin, debug logs")
-	s1URL := flag.String("system1", defaultSystem1, `System 1 decision endpoint for computer players; "off" for none. While it's unreachable they play as Planner`)
+	s1URL := flag.String("system1", "", `System 1 decision endpoint for computer players, e.g. http://127.0.0.1:8799/predict (off when empty). When set, System 1 is the default computer; while it's unreachable those players play as Planner`)
 	s1Key := flag.String("system1-key", "", "API key for the System 1 endpoint (sent as a Bearer token)")
 	s1Batch := flag.Bool("system1-batch", true, "send several states per request; off sends one request per state")
 	flag.Parse()

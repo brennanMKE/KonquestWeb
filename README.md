@@ -77,12 +77,16 @@ Start any endpoint with that shape. For example, with System 1 Arcade's Laya ser
 
 ```sh
 python agents/laya_server.py --port 8799          # in the System1Arcade checkout, with Laya installed
-bin/server -system1 http://127.0.0.1:8799/predict # hosts can now add "System 1 model" computers
+bin/server -system1 http://127.0.0.1:8799/predict # "System 1 model" becomes the default computer
 ```
+
+The server leaves System 1 off unless `-system1` is given (the live site runs without it). Locally,
+`scripts/restart.sh` turns it on: it starts System 1 Arcade's Laya on :8799 if it isn't running and passes
+`-system1`; `scripts/restart.sh -system1 off` skips it.
 
 `-system1-key` sends an API key as a Bearer token; `-system1-batch=false` sends one request per state for
 endpoints that don't take batches. If the model can't be reached, that computer plays as Planner for the
-turn.
+turn; the server logs the model going down and coming back.
 
 ### Measuring a model
 

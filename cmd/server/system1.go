@@ -8,10 +8,6 @@ import (
 	"time"
 )
 
-// defaultSystem1 is where System 1 Arcade's Laya server listens when started
-// with --port 8799 (scripts/restart.sh starts it).
-const defaultSystem1 = "http://127.0.0.1:8799/predict"
-
 // modelHealth logs the System 1 model going down and coming back, once each
 // way rather than on every turn.
 type modelHealth struct {

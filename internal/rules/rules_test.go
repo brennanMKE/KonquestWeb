@@ -351,7 +351,7 @@ func TestReinforcement(t *testing.T) {
 func TestFleetArrivesOnTime(t *testing.T) {
 	g := testGame(t, 2, DefaultSettings(), twoPlayerMap())
 	must(g.Launch(0, 0, 3, 10)) // D is 2 rounds away
-	if evs := endRound(t, g); len(evs) != 0 {
+	if evs := endRound(t, g); evs == nil || len(evs) != 0 {
 		t.Fatalf("round 1 events: %+v", evs)
 	}
 	if len(g.State().Fleets) != 1 {

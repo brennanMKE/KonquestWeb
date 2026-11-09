@@ -6,12 +6,13 @@ see, and turns resolve on an authoritative Go server over WebSockets.
 
 The name nods to stellar parallax, the way astronomers measure the distance to stars.
 
-**Status:** milestone 1 (rules engine). See [SPEC.md](SPEC.md) for the design and milestones, and
+**Status:** milestone 2 (server, rooms and protocol). See [SPEC.md](SPEC.md) for the design and milestones, and
 [RULES.md](RULES.md) for the exact rules.
 
 ```sh
 make test                          # rules and AI tests
 make sim ARGS="-seed 7 -depth 4"   # a seeded AI-vs-AI game on a 3D map, with its turn log
+make build && bin/server -addr :8080   # the game server (web client arrives in milestone 3)
 ```
 
 ## How it plays

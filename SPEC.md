@@ -147,21 +147,24 @@ JSON over one WebSocket per client at `/ws?room=CODE`. Every message has `{"type
 Client to server:
 - `join {name, token?}`: `token` resumes a seat after reconnect (stored in localStorage).
 - `set_settings {...}` (host only, lobby only)
-- `add_ai {kind}` / `remove_seat {seat}` (host only)
+- `add_ai {kind}` / `remove_seat {seat}` (host only, lobby only). `kind` defaults to `greedy`.
+- `replace_with_ai {seat, kind?}` (host only): hand a disconnected player's seat to a computer player.
 - `reroll_map` (host only)
 - `start_game` (host only)
 - `send_fleet {from, to, ships}`: active player only. Final once accepted.
 - `end_turn`: active player only.
 
 Server to client:
-- `welcome {seat, token, room}`
-- `lobby {players, settings, mapPreview}`
+- `welcome {seat, token, room}`: also re-sent when a seat number changes after a removal.
+- `lobby {room, phase, host, seats, settings, mapPreview}`: sent on every lobby change, at game start and at game over. `phase` is `lobby`, `playing` or `over`; `mapPreview` (positions and owners only) is sent only in the lobby.
 - `your_turn {round, view, deadline?}`: sent to the active player.
-- `player_turn {round, seat, name, deadline?}`: sent to everyone else.
+- `player_turn {round, seat, name, view, deadline?}`: sent to everyone else, with their own view.
 - `fleet_ack {fleetId, arrivalRound}` / `error {code, message}`
 - `seat_status {seat, connected}`
 - `round_result {round, events, view}`: sent to each player after the round resolves, with only the events and state that player may see.
-- `game_over {standings}`
+- `game_over {winner, standings}`
+
+HTTP: `POST /api/rooms` creates a room and returns `{code}`; `GET /api/rooms/{code}` checks that a room exists. Rooms close after 10 minutes with no human connected.
 
 Validate every client message on the server: it's the sender's turn, they own the source planet, they have enough ships, the game is in the right phase, and host-only actions come from the host.
 

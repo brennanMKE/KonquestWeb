@@ -46,7 +46,7 @@ func (e Event) VisibleTo(seat int) bool {
 // arrivals, production, elimination, game over.
 func (g *Game) resolve() []Event {
 	r := g.st.Round
-	var events []Event
+	events := []Event{} // non-nil: EndTurn callers use nil to mean "round not resolved"
 
 	var arriving, staying []Fleet
 	for _, f := range g.st.Fleets {

@@ -156,7 +156,8 @@ func (g *Game) Launch(seat, from, to, ships int) (Fleet, error) {
 }
 
 // EndTurn ends seat's turn. If it was the last living seat in the round, the
-// round resolves and its events are returned; otherwise events are nil.
+// round resolves and its events are returned, non-nil even when empty.
+// Otherwise events are nil.
 func (g *Game) EndTurn(seat int) ([]Event, error) {
 	if err := g.checkTurn(seat); err != nil {
 		return nil, err

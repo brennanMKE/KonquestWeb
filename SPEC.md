@@ -75,6 +75,7 @@ Distance is the core skill in this game, so depth has to stay readable.
 - **Territory:** every block of space (one cell on a flat map, an eighth of the largest side in 3D) belongs to the owner of its nearest planet and is tinted their colour: translucent blocks in the cube, tinted cells on the map. Empires visibly grow as they take planets, and a planet taken deep in enemy space makes a pocket until the planets between join up. Neutral space stays clear. It's computed in the client from planet ownership, which is public.
 - **Camera:** buttons for Top, Front, Side and Corner views, Reset view, and Arrivals, which steps through planets where your fleets land at the end of this round.
 - **Battle replays:** after each round the 3D camera flies to each battle you can see (your own first): the attackers converge, the exchanges flash and crackle, then the planet changes colour or rings as it holds, with the outcome's sound. A click or Esc skips; a toggle turns replays off.
+- **Idle drift:** after 10 seconds with no input, no replay and no order being entered, the camera backs out to show the whole map, levels it and turns it slowly. Any input stops it where it is.
 - **Sound:** synthesized with Web Audio (no files), following System 1 Arcade's approach: your turn, launches, end turn, reinforcements, battle exchanges, captures, holds, losses, eliminations, win and game over. A header toggle turns it off.
 - The measure-distance tool matters more in 3D. Show turns for any pair of planets.
 

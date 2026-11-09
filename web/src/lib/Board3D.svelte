@@ -359,6 +359,7 @@
   $effect(() => {
     if (replay && replay.round !== replayed && renderer) {
       replayed = replay.round;
+      noteInput();
       runReplay(replay.events);
     }
   });
@@ -394,6 +395,7 @@
       await focusOn(e.planet, 650);
       await battle(e);
     }
+    lastInput = performance.now(); // a lull starts after the replay
     shownOwner = new Map();
     for (const a of anims) a(Infinity);
     anims = [];
@@ -497,6 +499,44 @@
     if (replaying) skip = true;
   }
 
+  // --- Idle drift ---------------------------------------------------------
+
+  // In a lull (no input, no replay, no order being entered) the camera backs
+  // out to show the whole map and slowly turns it. Any input stops it where
+  // it is.
+  const idleAfterMs = 10_000;
+  const driftRadPerSec = 0.12;
+  let lastInput = performance.now();
+  let idling = false;
+  const yAxis = new THREE.Vector3(0, 1, 0);
+
+  function noteInput() {
+    lastInput = performance.now();
+    if (idling) {
+      idling = false;
+      move?.done();
+      move = null;
+    }
+  }
+
+  function stepIdle(now: number, dt: number) {
+    const lull = !replaying && source === null && dest === null && now - lastInput > idleAfterMs;
+    if (!lull) return false;
+    if (!idling) {
+      idling = true;
+      // Back out to an overview, level, looking at the centre.
+      const dir = camera.position.clone().sub(controls.target);
+      dir.y = Math.max(dir.y, 0.35 * dir.length());
+      flyTo(dir.normalize().multiplyScalar(span() * 2.1), new THREE.Vector3(), yAxis, 2500);
+      return true;
+    }
+    if (move) return true; // still backing out
+    camera.position.applyAxisAngle(yAxis, driftRadPerSec * dt);
+    camera.up.copy(yAxis);
+    camera.lookAt(controls.target);
+    return true;
+  }
+
   // Picking: a click is a press and release without much dragging, so
   // orbiting the camera never picks a planet by accident.
   const raycaster = new THREE.Raycaster();
@@ -554,13 +594,17 @@
     let down: { x: number; y: number } | null = null;
     const el = renderer.domElement;
     const onDown = (e: PointerEvent) => {
+      noteInput();
       skipReplay();
       down = { x: e.clientX, y: e.clientY };
     };
     const onKey = (e: KeyboardEvent) => {
+      noteInput();
       if (e.key === "Escape") skipReplay();
     };
     window.addEventListener("keydown", onKey);
+    const onWheel = () => noteInput();
+    el.addEventListener("wheel", onWheel, { passive: true });
     const onUp = (e: PointerEvent) => {
       if (down && Math.hypot(e.clientX - down.x, e.clientY - down.y) < 6) {
         const id = planetAt(e);
@@ -569,6 +613,7 @@
       down = null;
     };
     const onMove = (e: PointerEvent) => {
+      noteInput();
       if (down) return;
       const id = planetAt(e);
       if (id !== hover) {
@@ -601,11 +646,15 @@
     resize();
 
     let frame = 0;
+    let prev = performance.now();
     const loop = () => {
       frame = requestAnimationFrame(loop);
       const now = performance.now();
+      const dt = Math.min(0.1, (now - prev) / 1000);
+      prev = now;
+      const drifting = stepIdle(now, dt);
       if (move) stepMove(now);
-      else controls.update();
+      else if (!drifting) controls.update();
       anims = anims.filter((a) => !a(now));
       for (const r of rings) r.lookAt(camera.position);
       renderer.render(scene, camera);
@@ -615,6 +664,7 @@
 
     return () => {
       window.removeEventListener("keydown", onKey);
+      el.removeEventListener("wheel", onWheel);
       cancelAnimationFrame(frame);
       ro.disconnect();
       controls.dispose();

@@ -862,3 +862,43 @@ func TestUnreachableModelPlayers(t *testing.T) {
 		t.Fatalf("phase %s after the model came back", l.Phase)
 	}
 }
+
+func TestPlayAgain(t *testing.T) {
+	r := newRoom(t, Options{})
+	alice, _ := join(t, r, "Alice")
+	bob, _ := join(t, r, "Bob")
+	alice.send(&proto.AddAI{})
+	s := proto.DefaultSettings()
+	s.AIDelayMs, s.MaxRounds = 0, 1
+	alice.send(&proto.SetSettings{Settings: s})
+	alice.send(&proto.NewGame{})
+	if code := errCode(t, alice); code != proto.ErrWrongPhase {
+		t.Fatalf("new game in the lobby: %s", code)
+	}
+	alice.send(&proto.StartGame{})
+	expect[proto.YourTurn](alice)
+	alice.send(&proto.EndTurn{})
+	expect[proto.YourTurn](bob)
+	bob.send(&proto.EndTurn{})
+	expect[proto.GameOver](alice)
+	expect[proto.GameOver](bob)
+
+	bob.send(&proto.NewGame{})
+	if code := errCode(t, bob); code != proto.ErrNotHost {
+		t.Fatalf("new game by a guest: %s", code)
+	}
+	alice.send(&proto.NewGame{})
+	for _, c := range []*testClient{alice, bob} {
+		var l *proto.Lobby
+		for l = expect[proto.Lobby](c); l.Phase != proto.PhaseLobby; l = expect[proto.Lobby](c) {
+		}
+		if len(l.Seats) != 3 || l.Seats[1].Name != "Bob" || l.Seats[2].Kind != proto.KindAI || l.Settings.MaxRounds != 1 {
+			t.Fatalf("lobby after the game: %+v", l)
+		}
+	}
+	// The same players start another game.
+	alice.send(&proto.StartGame{})
+	if yt := expect[proto.YourTurn](alice); yt.Round != 1 {
+		t.Fatalf("new game starts at round %d", yt.Round)
+	}
+}

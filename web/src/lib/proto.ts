@@ -128,6 +128,7 @@ export type ClientMsg =
   | { type: "join"; name: string; token?: string }
   | { type: "set_settings"; settings: Settings }
   | { type: "add_ai"; kind?: string }
+  | { type: "new_game" }
   | { type: "remove_seat"; seat: number }
   | { type: "replace_with_ai"; seat: number; kind?: string }
   | { type: "reroll_map" }

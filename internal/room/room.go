@@ -327,6 +327,10 @@ func (r *Room) handle(c *Client, data []byte) {
 		if r.hostLobby(c, s) {
 			r.start(c)
 		}
+	case *proto.NewGame:
+		if r.isHost(c, s) {
+			r.newGame(c)
+		}
 	case *proto.Watch:
 		if r.hostLobby(c, s) {
 			r.setWatching(c, m.Watch)
@@ -665,6 +669,22 @@ func (r *Room) start(c *Client) {
 			r.begin(c)
 		})
 	}()
+}
+
+// newGame returns a finished game's room to the lobby. Everyone keeps their
+// seat, computers included, along with the settings; the map is new.
+func (r *Room) newGame(c *Client) {
+	if r.phase != proto.PhaseOver {
+		r.sendError(c, proto.ErrWrongPhase, "the game isn't over")
+		return
+	}
+	r.game = nil
+	r.phase = proto.PhaseLobby
+	r.seed = r.opts.NewSeed()
+	r.turnGen++ // stops any timer from the last game
+	r.deadline = 0
+	r.log.Info("back to the lobby for a new game")
+	r.broadcastLobby()
 }
 
 func (r *Room) begin(c *Client) {

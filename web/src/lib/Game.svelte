@@ -224,7 +224,15 @@
             {/each}
           </tbody>
         </table>
-        <button onclick={() => (store.standings = null)}>Back to the map</button>
+        <div class="actions">
+          {#if store.isHost}
+            <button class="primary" onclick={() => store.playAgain()} title="Back to the lobby with the same players and a new map">Play again</button>
+          {:else}
+            <span class="muted">Waiting for the host to start another game.</span>
+          {/if}
+          <button onclick={() => store.leave()} title="Go to the start page to create or join another room">New room</button>
+          <button onclick={() => (store.standings = null)}>Back to the map</button>
+        </div>
       </div>
     </div>
   {/if}
@@ -384,6 +392,12 @@
     padding: 24px;
     max-width: 100%;
     overflow-x: auto;
+  }
+  .actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
   }
   .card h2 {
     margin-top: 0;

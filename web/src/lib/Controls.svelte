@@ -75,6 +75,14 @@
   <section class="orders">
     {#if store.phase === "over"}
       <p>The game is over.</p>
+      <div class="again">
+        {#if store.isHost}
+          <button class="primary" onclick={() => store.playAgain()} title="Back to the lobby with the same players and a new map">Play again</button>
+        {:else}
+          <p class="hint">Waiting for the host to start another game.</p>
+        {/if}
+        <button onclick={() => store.leave()} title="Go to the start page to create or join another room">New room</button>
+      </div>
     {:else if store.watching}
       <p>You're watching. {activeName} is moving.</p>
       <p class="hint">Drag to turn the map. Each round's battles replay in 3D.</p>
@@ -242,6 +250,16 @@
     height: 10px;
     border-radius: 50%;
     flex: none;
+  }
+  .again {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+  }
+  .again .hint {
+    flex-basis: 100%;
+    margin: 0;
   }
   .row {
     display: flex;

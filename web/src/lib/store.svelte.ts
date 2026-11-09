@@ -197,6 +197,32 @@ class Store {
     this.log.push({ id: this.logId++, round, text, tone });
   }
 
+  /** Forgets the last game, for the next one in this room. */
+  private clearGame() {
+    this.view = null;
+    this.round = 0;
+    this.active = -1;
+    this.deadline = 0;
+    this.log = [];
+    this.standings = null;
+    this.winner = -1;
+    this.lastEvents = null;
+    clearTimeout(this.replayFallback);
+    this.replayPending = false;
+    this.pendingRound = 0;
+    this.afterReplay = null;
+  }
+
+  /** The host takes the room back to the lobby for another game. */
+  playAgain() {
+    this.send({ type: "new_game" });
+  }
+
+  /** Leaves this room for the start page, to create or join another. */
+  leave() {
+    location.href = "/";
+  }
+
   private handle(m: ServerMsg) {
     switch (m.type) {
       case "welcome":
@@ -207,6 +233,8 @@ class Store {
         save(tokenKey(m.room), m.token);
         break;
       case "lobby":
+        // Back in the lobby after a game: the host is setting up another.
+        if (m.phase === "lobby" && this.phase !== "lobby") this.clearGame();
         this.phase = m.phase;
         this.host = m.host;
         this.seats = m.seats;

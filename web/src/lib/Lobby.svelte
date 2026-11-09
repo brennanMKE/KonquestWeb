@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from "svelte";
   import { store } from "./store.svelte";
   import { unlockAudio } from "./audio";
   import { ownerColor } from "./colors";
@@ -17,9 +18,22 @@
   // The host edits a draft; changes go to the server, which validates and
   // broadcasts the result back.
   let draft = $state<Settings | null>(null);
+  // Fields typed since the last send. The server's echo of an earlier change
+  // must not wipe them out before they're sent.
+  let dirty = new Set<keyof Settings>();
   $effect(() => {
-    if (store.settings) draft = { ...store.settings };
+    const server = store.settings;
+    if (!server) return;
+    const next = { ...server };
+    const old = untrack(() => draft);
+    if (old) for (const k of dirty) (next as Record<string, unknown>)[k] = old[k];
+    draft = next;
   });
+  function edit<K extends keyof Settings>(key: K, value: Settings[K]) {
+    if (!draft) return;
+    draft[key] = value;
+    dirty.add(key);
+  }
 
   // Map shapes, with a ship speed and neutral count that suit each size.
   const shapes = [
@@ -50,6 +64,7 @@
   }
 
   function apply() {
+    dirty.clear();
     if (draft) store.send({ type: "set_settings", settings: { ...draft } });
   }
 
@@ -161,7 +176,7 @@
                 {max}
                 {step}
                 value={(draft[key] as number) / scale}
-                oninput={(e) => draft && ((draft[key] as number) = Math.round(e.currentTarget.valueAsNumber * scale))}
+                oninput={(e) => edit(key, Math.round(e.currentTarget.valueAsNumber * scale) as Settings[typeof key])}
               />
             </label>
           {/each}
@@ -170,7 +185,7 @@
               <input
                 type="checkbox"
                 checked={draft[key] as boolean}
-                oninput={(e) => draft && ((draft[key] as boolean) = e.currentTarget.checked)}
+                oninput={(e) => edit(key, e.currentTarget.checked as Settings[typeof key])}
               />
               <span>{label}</span>
             </label>

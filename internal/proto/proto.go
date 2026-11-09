@@ -104,6 +104,10 @@ type Watch struct {
 }
 type RerollMap struct{}
 type StartGame struct{}
+
+// NewGame takes a finished game's room back to the lobby for another game
+// with the same seats. Host only.
+type NewGame struct{}
 type SendFleet struct {
 	From  int `json:"from"`
 	To    int `json:"to"`
@@ -191,6 +195,7 @@ var types = map[string]func() any{
 	"reroll_map":      func() any { return &RerollMap{} },
 	"watch":           func() any { return &Watch{} },
 	"start_game":      func() any { return &StartGame{} },
+	"new_game":        func() any { return &NewGame{} },
 	"send_fleet":      func() any { return &SendFleet{} },
 	"end_turn":        func() any { return &EndTurn{} },
 	"welcome":         func() any { return &Welcome{} },

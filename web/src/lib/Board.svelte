@@ -37,7 +37,7 @@
 
   const cx = (p: PlanetView) => p.pos.x + 0.5;
   const cy = (p: PlanetView) => p.pos.y + 0.5;
-  // Higher layers draw slightly larger, so depth reads at a glance.
+  // 2.5D: on a deep map, higher layers draw larger and carry a z label.
   const radius = (p: PlanetView) => (depth > 1 ? 0.27 + (0.1 * p.pos.z) / (depth - 1) : 0.32);
 
   // Draw lower layers first so higher planets sit on top.
@@ -133,7 +133,7 @@
         <text class="ships" x={cx(p)} y={cy(p) + r + 0.2}>{p.ships}</text>
       {/if}
       {#if depth > 1}
-        <text class="z" x={cx(p) + r} y={cy(p) - r}>{p.pos.z}</text>
+        <text class="z" x={cx(p) + r * 0.8} y={cy(p) - r * 0.8}>z{p.pos.z}</text>
       {/if}
     </g>
   {/each}
@@ -182,8 +182,11 @@
     pointer-events: none;
   }
   .z {
-    font-size: 0.2px;
+    font-size: 0.19px;
     fill: var(--muted);
+    paint-order: stroke;
+    stroke: var(--bg);
+    stroke-width: 0.06px;
     pointer-events: none;
   }
   .aim {

@@ -568,3 +568,93 @@ func TestManager(t *testing.T) {
 		time.Sleep(5 * time.Millisecond)
 	}
 }
+
+func TestTurnTimer(t *testing.T) {
+	s := proto.DefaultSettings()
+	s.TurnTimerMs = 60
+	start := time.Now()
+	_, alice, bob := startTwo(t, s)
+	yt := expect[proto.YourTurn](alice)
+	if pt := expect[proto.PlayerTurn](bob); pt.Deadline != yt.Deadline {
+		t.Fatalf("deadlines differ: %d vs %d", pt.Deadline, yt.Deadline)
+	}
+	if yt.Deadline < start.UnixMilli()+50 || yt.Deadline > time.Now().UnixMilli()+70 {
+		t.Fatalf("deadline %d is off", yt.Deadline)
+	}
+	home := homeOf(yt.View)
+	alice.send(&proto.SendFleet{From: home.ID, To: (home.ID + 1) % len(yt.View.Planets), Ships: 3})
+	expect[proto.FleetAck](alice)
+
+	// Alice never ends her turn; the timer does, keeping her fleet.
+	expect[proto.YourTurn](bob)
+	rr := expect[proto.RoundResult](alice) // bob's timer runs out too
+	if rr.Round != 1 || len(rr.View.Fleets)+len(rr.Events) == 0 {
+		t.Fatalf("alice's fleet was lost: %+v", rr)
+	}
+	if yt := expect[proto.YourTurn](alice); yt.Round != 2 || yt.Deadline == 0 {
+		t.Fatalf("round 2: %+v", yt)
+	}
+}
+
+func TestDisconnectSkip(t *testing.T) {
+	s := proto.DefaultSettings()
+	s.DisconnectGraceMs = 40
+	r, alice, bob := startTwo(t, s)
+	expect[proto.YourTurn](alice)
+
+	// Bob leaves while waiting; his turn is skipped when it comes up.
+	r.Leave(bob.c)
+	expect[proto.SeatStatus](alice)
+	alice.send(&proto.EndTurn{})
+	if pt := expect[proto.PlayerTurn](alice); pt.Seat != 1 {
+		t.Fatalf("player turn %+v", pt)
+	}
+	expect[proto.RoundResult](alice)
+	expect[proto.YourTurn](alice)
+
+	// Bob comes back, then leaves during his own turn.
+	bob2 := connect(t, r)
+	bob2.send(&proto.Join{Token: expectToken(t, bob)})
+	expect[proto.PlayerTurn](bob2)
+	alice.send(&proto.EndTurn{})
+	expect[proto.YourTurn](bob2)
+	r.Leave(bob2.c)
+	expect[proto.RoundResult](alice)
+	if yt := expect[proto.YourTurn](alice); yt.Round != 3 {
+		t.Fatalf("round %d", yt.Round)
+	}
+}
+
+func TestDisconnectWaitsWithoutGrace(t *testing.T) {
+	r, alice, bob := startTwo(t, proto.DefaultSettings())
+	expect[proto.YourTurn](alice)
+	alice.send(&proto.EndTurn{})
+	expect[proto.YourTurn](bob)
+	alice.pending()
+	r.Leave(bob.c)
+	time.Sleep(100 * time.Millisecond)
+	for _, m := range alice.pending() {
+		if _, ok := m.(*proto.RoundResult); ok {
+			t.Fatal("turn skipped with no grace period")
+		}
+	}
+}
+
+func TestTimerSettingsValidated(t *testing.T) {
+	r := newRoom(t, Options{})
+	alice, _ := join(t, r, "A")
+	for _, mod := range []func(*proto.Settings){
+		func(s *proto.Settings) { s.TurnTimerMs = -1 },
+		func(s *proto.Settings) { s.TurnTimerMs = 3600001 },
+		func(s *proto.Settings) { s.DisconnectGraceMs = -1 },
+		func(s *proto.Settings) { s.DisconnectGraceMs = 600001 },
+		func(s *proto.Settings) { s.AIDelayMs = 10001 },
+	} {
+		s := proto.DefaultSettings()
+		mod(&s)
+		alice.send(&proto.SetSettings{Settings: s})
+		if code := errCode(t, alice); code != proto.ErrBadSetting {
+			t.Fatalf("settings %+v: %s", s, code)
+		}
+	}
+}

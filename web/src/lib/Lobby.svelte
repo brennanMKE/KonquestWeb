@@ -28,14 +28,18 @@
     }
   }
 
-  const numberFields: [keyof Settings, string, number, number, number][] = [
-    ["width", "Width", 4, 64, 1],
-    ["height", "Height", 4, 64, 1],
-    ["depth", "Depth", 1, 64, 1],
-    ["neutrals", "Neutral planets", 0, 60, 1],
-    ["shipSpeed", "Ship speed", 0.5, 10, 0.5],
-    ["maxRounds", "Max rounds (0 = none)", 0, 999, 1],
-    ["aiDelayMs", "Computer delay (ms)", 0, 10000, 100],
+  // [setting, label, min, max, step, scale]: the input shows value / scale,
+  // so millisecond settings can be edited in seconds.
+  const numberFields: [keyof Settings, string, number, number, number, number][] = [
+    ["width", "Width", 4, 64, 1, 1],
+    ["height", "Height", 4, 64, 1, 1],
+    ["depth", "Depth (1 = flat)", 1, 64, 1, 1],
+    ["neutrals", "Neutral planets", 0, 60, 1, 1],
+    ["shipSpeed", "Ship speed", 0.5, 10, 0.5, 1],
+    ["maxRounds", "Max rounds (0 = none)", 0, 999, 1, 1],
+    ["turnTimerMs", "Turn timer, s (0 = off)", 0, 3600, 5, 1000],
+    ["disconnectGraceMs", "Skip away players after, s (0 = wait)", 0, 600, 5, 1000],
+    ["aiDelayMs", "Computer delay, s", 0, 10, 0.25, 1000],
   ];
   const boolFields: [keyof Settings, string][] = [
     ["blindMap", "Blind map"],
@@ -85,7 +89,7 @@
       <h2>Settings</h2>
       <form class="settings" onchange={apply} onsubmit={(e) => e.preventDefault()}>
         <fieldset disabled={!store.isHost}>
-          {#each numberFields as [key, label, min, max, step]}
+          {#each numberFields as [key, label, min, max, step, scale]}
             <label>
               <span>{label}</span>
               <input
@@ -93,8 +97,8 @@
                 {min}
                 {max}
                 {step}
-                value={draft[key]}
-                oninput={(e) => draft && ((draft[key] as number) = e.currentTarget.valueAsNumber)}
+                value={(draft[key] as number) / scale}
+                oninput={(e) => draft && ((draft[key] as number) = Math.round(e.currentTarget.valueAsNumber * scale))}
               />
             </label>
           {/each}

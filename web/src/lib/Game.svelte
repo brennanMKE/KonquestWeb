@@ -3,6 +3,8 @@
   import { ownerColor } from "./colors";
   import { distance, travelTurns } from "./proto";
   import Board from "./Board.svelte";
+  import FleetList from "./FleetList.svelte";
+  import Standings from "./Standings.svelte";
 
   let view = $derived(store.view!);
   let settings = $derived(view.settings);
@@ -13,6 +15,21 @@
   let ships = $state(0);
   let hover = $state<number | null>(null);
   let shipInput = $state<HTMLInputElement | null>(null);
+
+  // Measure tool: pick two planets to see the distance and travel time.
+  let measuring = $state(false);
+  let measureA = $state<number | null>(null);
+  let measureB = $state<number | null>(null);
+
+  let tab = $state<"log" | "fleets" | "standings">("log");
+
+  // Turn timer countdown.
+  let now = $state(Date.now());
+  $effect(() => {
+    const t = setInterval(() => (now = Date.now()), 250);
+    return () => clearInterval(t);
+  });
+  let secondsLeft = $derived(store.deadline ? Math.max(0, Math.ceil((store.deadline - now) / 1000)) : null);
 
   let srcPlanet = $derived(source !== null ? view.planets[source] : null);
   let dstPlanet = $derived(dest !== null ? view.planets[dest] : null);
@@ -28,7 +45,21 @@
     dest = null;
   }
 
+  function toggleMeasure() {
+    measuring = !measuring;
+    measureA = measureB = null;
+  }
+
   function pick(id: number) {
+    if (measuring) {
+      if (measureA === null || measureB !== null) {
+        measureA = id;
+        measureB = null;
+      } else if (id !== measureA) {
+        measureB = id;
+      }
+      return;
+    }
     if (!store.myTurn) return;
     const p = view.planets[id];
     if (source === null || dest !== null) {
@@ -71,7 +102,8 @@
   // Keyboard: planet letters pick planets, Esc cancels, as in the original.
   function onkey(e: KeyboardEvent) {
     if (e.key === "Escape") {
-      cancel();
+      if (measuring) toggleMeasure();
+      else cancel();
       return;
     }
     const target = e.target as HTMLElement;
@@ -113,11 +145,21 @@
         {activeName} is moving
       {/if}
     </span>
+    {#if secondsLeft !== null && store.phase === "playing"}
+      <span class="timer" class:low={secondsLeft <= 10}>{Math.floor(secondsLeft / 60)}:{String(secondsLeft % 60).padStart(2, "0")}</span>
+    {/if}
     <span class="spacer"></span>
     {#if store.conn !== "open"}<span class="badge warn">Reconnecting…</span>{/if}
     {#each store.seats as s (s.seat)}
       <span class="player" class:out={!view.players[s.seat]?.alive} class:away={!s.connected} title={s.name}>
         <span class="dot" style:background={ownerColor(s.seat)}></span>{s.seat === store.seat ? "You" : s.name}
+        {#if store.isHost && !s.connected && s.kind === "human" && store.phase === "playing"}
+          <button
+            class="small"
+            title="Let a computer play this seat"
+            onclick={() => store.send({ type: "replace_with_ai", seat: s.seat })}>Hand to computer</button
+          >
+        {/if}
       </span>
     {/each}
   </header>
@@ -133,8 +175,8 @@
         seat={store.seat}
         fleets={view.fleets}
         round={view.round}
-        {source}
-        {dest}
+        source={measuring ? measureA : source}
+        dest={measuring ? measureB : dest}
         onpick={pick}
         onhover={(id) => (hover = id)}
       />
@@ -178,7 +220,27 @@
         {#if store.myTurn}
           <button class="primary end" onclick={endTurn}>End turn</button>
         {/if}
+        <button class="measure" class:on={measuring} onclick={toggleMeasure}>
+          {measuring ? "Stop measuring" : "Measure distance"}
+        </button>
       </section>
+
+      {#if measuring}
+        <section class="measuring">
+          {#if measureA !== null && measureB !== null}
+            {@const a = view.planets[measureA]}
+            {@const b = view.planets[measureB]}
+            <p>
+              <b>{a.name}</b> to <b>{b.name}</b>: {distance(a.pos, b.pos).toFixed(1)} cells,
+              <b>{travelTurns(a.pos, b.pos, settings.shipSpeed)}</b> rounds
+            </p>
+          {:else if measureA !== null}
+            <p>From <b>{view.planets[measureA].name}</b>. Pick a second planet.</p>
+          {:else}
+            <p>Pick two planets to measure.</p>
+          {/if}
+        </section>
+      {/if}
 
       <section class="info">
         {#if infoPlanet}
@@ -212,12 +274,23 @@
         {/if}
       </section>
 
+      <nav class="tabs" aria-label="Panels">
+        <button class:on={tab === "log"} onclick={() => (tab = "log")}>Log</button>
+        <button class:on={tab === "fleets"} onclick={() => (tab = "fleets")}>Fleets ({view.fleets.length})</button>
+        <button class:on={tab === "standings"} onclick={() => (tab = "standings")}>Standings</button>
+      </nav>
       <section class="log" bind:this={logEl}>
-        {#each store.log as entry (entry.id)}
-          <p class={entry.tone}><span class="r">{entry.round}</span>{entry.text}</p>
+        {#if tab === "fleets"}
+          <FleetList {view} />
+        {:else if tab === "standings"}
+          <Standings {view} seats={store.seats} />
         {:else}
-          <p class="muted">Battle reports appear here.</p>
-        {/each}
+          {#each store.log as entry (entry.id)}
+            <p class={entry.tone}><span class="r">{entry.round}</span>{entry.text}</p>
+          {:else}
+            <p class="muted">Battle reports appear here.</p>
+          {/each}
+        {/if}
       </section>
     </aside>
   </main>
@@ -350,9 +423,32 @@
     color: var(--muted);
     margin-top: 8px;
   }
-  .end {
+  .end,
+  .measure {
     width: 100%;
     margin-top: 8px;
+  }
+  .measure.on,
+  .tabs button.on {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .tabs {
+    display: flex;
+    gap: 4px;
+    padding: 8px 16px 0;
+  }
+  .tabs button {
+    flex: 1;
+    padding: 4px 6px;
+    font-size: 13px;
+  }
+  .timer {
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+  }
+  .timer.low {
+    color: var(--bad);
   }
   .info h3 {
     margin: 0 0 8px;

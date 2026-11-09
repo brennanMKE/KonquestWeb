@@ -6,7 +6,7 @@ see, and turns resolve on an authoritative Go server over WebSockets.
 
 The name nods to stellar parallax, the way astronomers measure the distance to stars.
 
-**Status:** milestone 3 (playable in the browser). See [SPEC.md](SPEC.md) for the design and milestones, and
+**Status:** milestone 4 (fleet overview, standings, measure tool, turn timer, 3D maps in 2.5D). See [SPEC.md](SPEC.md) for the design and milestones, and
 [RULES.md](RULES.md) for the exact rules.
 
 ```sh

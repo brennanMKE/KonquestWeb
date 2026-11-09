@@ -68,7 +68,7 @@ Track per-player stats (ships built, ships destroyed, ships lost, planets conque
 Distance is the core skill in this game, so depth has to stay readable.
 
 - **Engine:** 3D from day one. Every planet has (x, y, z), and travel uses 3D distance. A flat map is depth 1 (z = 0). This costs almost nothing.
-- **Client v1:** the flat SVG board. For depth > 1 maps, show each planet's height as a label or a stalk/shadow (a 2.5D view), which keeps clicking and iPad play easy.
+- **Client v1:** the flat SVG board. On depth > 1 maps each planet shows its layer as a `z` label and draws larger the higher it is (a 2.5D view), which keeps clicking and iPad play easy. A shadow-and-stalk cue was tried and dropped: it hid under the planets and cluttered the board.
 - **Later:** a "3D map" room option with shallow volumes (e.g. 16 × 16 × 4) first. A full three.js view with camera controls only if playtests show the extra fronts are fun rather than chaotic.
 - The measure-distance tool matters more in 3D. Show turns for any pair of planets.
 
@@ -89,8 +89,8 @@ Waiting players:
 - Get no information about the active player's orders. They only find out about fleets when the fleets arrive.
 
 Timeouts (room settings, all off by default):
-- Turn timer: if the active player doesn't end their turn in time, the server ends it for them, keeping any orders they already gave.
-- Disconnect: if the active player disconnects, the server waits for a reconnect grace period, then skips their turn. The host can also switch a disconnected seat to an AI.
+- Turn timer (`turnTimerMs`): if the active player doesn't end their turn in time, the server ends it for them, keeping any orders they already gave. Turn messages carry the `deadline`.
+- Disconnect (`disconnectGraceMs`): if the active player is disconnected, the server waits for the grace period, then skips their turn. With no grace period it waits; the host can always hand a disconnected seat to a computer (`replace_with_ai`).
 
 ## Computer players
 
@@ -129,6 +129,7 @@ The server is authoritative. Clients only send intents and render what they're t
 - Board shows planets on the grid with owner colors. Hovering a planet shows name, owner, ships, production and kill percentage, limited to what that player is allowed to see.
 - Order entry: click source, click destination, type a ship count (default to all, Enter to confirm, Esc to cancel).
 - Panels: fleet overview (own fleets, ship counts, arrival round), standings, turn log ("Planet D has held against an attack from Alice"), measure-distance tool (click two planets, show distance and turns).
+- Mid-game standings use only the player's own view: everyone's planet count, production where visible, and ships only for yourself (other players' totals would reveal fleets in flight).
 - Reconnects automatically. On reconnect the server resends the full view for that player.
 
 ### Hidden information

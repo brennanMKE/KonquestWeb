@@ -19,6 +19,8 @@ export interface Settings {
   captureProducesImmediately: boolean;
   maxRounds: number;
   aiDelayMs: number;
+  turnTimerMs: number;
+  disconnectGraceMs: number;
 }
 
 export interface PlanetView {
@@ -54,7 +56,7 @@ export interface View {
   seat: number;
   round: number;
   active: number;
-  settings: Omit<Settings, "aiDelayMs">;
+  settings: Omit<Settings, "aiDelayMs" | "turnTimerMs" | "disconnectGraceMs">;
   planets: PlanetView[];
   fleets: Fleet[];
   players: { seat: number; alive: boolean }[];

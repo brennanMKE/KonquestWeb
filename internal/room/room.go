@@ -71,9 +71,12 @@ type Room struct {
 	phase    string
 	game     *rules.Game
 
-	aiGen   int
-	idle    *time.Timer
-	idleGen int
+	// turnGen increments with every announced turn, so timers set for an
+	// earlier turn do nothing.
+	turnGen  int
+	deadline int64
+	idle     *time.Timer
+	idleGen  int
 }
 
 // New creates a room. Call Run to start it.
@@ -194,6 +197,9 @@ func (r *Room) drop(c *Client) {
 		s.client = nil
 		r.broadcastSeatStatus(s)
 		r.armIdle()
+		if r.phase == proto.PhasePlaying && r.seatIndex(s) == r.game.Active() {
+			r.scheduleDisconnectSkip(s)
+		}
 	}
 }
 
@@ -407,6 +413,14 @@ func (r *Room) setSettings(c *Client, ps proto.Settings) {
 		r.sendError(c, proto.ErrBadSetting, "AI delay must be 0 to 10000 ms")
 		return
 	}
+	if ps.TurnTimerMs < 0 || ps.TurnTimerMs > 3600000 {
+		r.sendError(c, proto.ErrBadSetting, "turn timer must be 0 to 1 hour")
+		return
+	}
+	if ps.DisconnectGraceMs < 0 || ps.DisconnectGraceMs > 600000 {
+		r.sendError(c, proto.ErrBadSetting, "disconnect grace must be 0 to 10 minutes")
+		return
+	}
 	r.settings = ps
 	r.broadcastLobby()
 }
@@ -571,35 +585,70 @@ func (r *Room) gameOverMsg() *proto.GameOver {
 
 // announceTurn tells the active player it's their turn and everyone else
 // who is moving, then runs the AI if the active seat is a computer.
+// A human's turn may also have a deadline (turn timer), and a disconnected
+// human's turn is skipped after the grace period.
 func (r *Room) announceTurn() {
-	for _, s := range r.seats {
-		r.sendTurn(s)
+	r.turnGen++
+	r.deadline = 0
+	s := r.seats[r.game.Active()]
+	if s.kind == proto.KindHuman && r.settings.TurnTimerMs > 0 {
+		d := time.Duration(r.settings.TurnTimerMs) * time.Millisecond
+		r.deadline = time.Now().Add(d).UnixMilli()
+		r.afterTurn(d, func() {
+			r.log.Info("turn timer expired", "seat", r.game.Active())
+			r.finishTurn(r.game.Active())
+		})
 	}
-	if r.seats[r.game.Active()].kind == proto.KindAI {
+	for _, x := range r.seats {
+		r.sendTurn(x)
+	}
+	switch {
+	case s.kind == proto.KindAI:
 		r.scheduleAI()
+	case s.client == nil:
+		r.scheduleDisconnectSkip(s)
 	}
 }
 
 func (r *Room) sendTurn(s *seat) {
 	i, active := r.seatIndex(s), r.game.Active()
 	if i == active {
-		r.send(s.client, &proto.YourTurn{Round: r.game.Round(), View: r.game.View(i)})
+		r.send(s.client, &proto.YourTurn{Round: r.game.Round(), View: r.game.View(i), Deadline: r.deadline})
 		return
 	}
-	r.send(s.client, &proto.PlayerTurn{Round: r.game.Round(), Seat: active, Name: r.seats[active].name, View: r.game.View(i)})
+	r.send(s.client, &proto.PlayerTurn{Round: r.game.Round(), Seat: active, Name: r.seats[active].name,
+		View: r.game.View(i), Deadline: r.deadline})
 }
 
-// scheduleAI runs the active computer player after the AI delay. A
-// generation number drops stale timers.
-func (r *Room) scheduleAI() {
-	r.aiGen++
-	gen := r.aiGen
-	time.AfterFunc(time.Duration(r.settings.AIDelayMs)*time.Millisecond, func() {
+// afterTurn runs f after d, but only if the same turn is still in play.
+func (r *Room) afterTurn(d time.Duration, f func()) {
+	gen := r.turnGen
+	time.AfterFunc(d, func() {
 		r.post(func() {
-			if gen == r.aiGen && r.phase == proto.PhasePlaying {
-				r.runAI()
+			if gen == r.turnGen && r.phase == proto.PhasePlaying {
+				f()
 			}
 		})
+	})
+}
+
+// scheduleAI runs the active computer player after the AI delay.
+func (r *Room) scheduleAI() {
+	r.afterTurn(time.Duration(r.settings.AIDelayMs)*time.Millisecond, r.runAI)
+}
+
+// scheduleDisconnectSkip ends a disconnected player's turn after the grace
+// period, unless they come back first. A grace of 0 waits forever (the host
+// can still hand the seat to a computer).
+func (r *Room) scheduleDisconnectSkip(s *seat) {
+	if r.settings.DisconnectGraceMs <= 0 {
+		return
+	}
+	r.afterTurn(time.Duration(r.settings.DisconnectGraceMs)*time.Millisecond, func() {
+		if s.client == nil && r.seatIndex(s) == r.game.Active() {
+			r.log.Info("skipping disconnected player", "seat", r.game.Active())
+			r.finishTurn(r.game.Active())
+		}
 	})
 }
 

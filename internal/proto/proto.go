@@ -17,6 +17,12 @@ type Settings struct {
 	// AIDelayMs is how long a computer player waits before moving, so humans
 	// can follow along.
 	AIDelayMs int `json:"aiDelayMs"`
+	// TurnTimerMs ends a human's turn after this long, keeping the orders
+	// they gave. 0 is off.
+	TurnTimerMs int `json:"turnTimerMs"`
+	// DisconnectGraceMs skips a disconnected player's turn after this long.
+	// 0 waits for them (the host can hand the seat to a computer).
+	DisconnectGraceMs int `json:"disconnectGraceMs"`
 }
 
 // DefaultSettings returns the standard room options.
@@ -111,9 +117,11 @@ type Lobby struct {
 	MapPreview []rules.PlanetView `json:"mapPreview"`
 }
 type YourTurn struct {
-	Round    int        `json:"round"`
-	View     rules.View `json:"view"`
-	Deadline int64      `json:"deadline,omitempty"`
+	Round int        `json:"round"`
+	View  rules.View `json:"view"`
+	// Deadline is when the turn timer ends the turn, in Unix milliseconds;
+	// 0 means no timer.
+	Deadline int64 `json:"deadline,omitempty"`
 }
 
 // PlayerTurn tells a waiting player whose turn it is, with the waiting

@@ -50,6 +50,8 @@ class Store {
   view = $state<View | null>(null);
   round = $state(0);
   active = $state(-1);
+  /** When the turn timer ends the current turn (Unix ms), or 0. */
+  deadline = $state(0);
   log = $state<LogEntry[]>([]);
   standings = $state<Standing[] | null>(null);
   winner = $state(-1);
@@ -139,11 +141,13 @@ class Store {
         this.view = m.view;
         this.round = m.round;
         this.active = this.seat;
+        this.deadline = m.deadline ?? 0;
         break;
       case "player_turn":
         this.view = m.view;
         this.round = m.round;
         this.active = m.seat;
+        this.deadline = m.deadline ?? 0;
         break;
       case "fleet_ack": {
         this.view = m.view;
@@ -167,6 +171,7 @@ class Store {
         this.standings = m.standings;
         this.winner = m.winner;
         this.phase = "over";
+        this.deadline = 0;
         break;
       case "error":
         this.onError(m.code, m.message);

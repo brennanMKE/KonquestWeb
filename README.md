@@ -6,8 +6,8 @@ see, and turns resolve on an authoritative Go server over WebSockets.
 
 The name nods to stellar parallax, the way astronomers measure the distance to stars.
 
-**Status:** milestones 1–5 done: a playable online game with rule-based and System 1 computer players,
-save/load, and 3D maps shown in 2.5D. See [SPEC.md](SPEC.md) for the design and milestones, and
+**Status:** all six milestones done: a playable online game with rule-based and System 1 computer players,
+save/load, and flat or 3D maps with an optional orbitable 3D view. See [SPEC.md](SPEC.md) for the design and milestones, and
 [RULES.md](RULES.md) for the exact rules.
 
 ```sh

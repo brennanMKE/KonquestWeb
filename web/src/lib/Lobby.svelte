@@ -16,6 +16,23 @@
     if (store.settings) draft = { ...store.settings };
   });
 
+  // Map shapes: a flat map, a shallow volume, or a cube.
+  const shapes = [
+    { name: "Flat", width: 16, height: 16, depth: 1 },
+    { name: "Shallow 3D", width: 16, height: 16, depth: 4 },
+    { name: "Deep 3D", width: 10, height: 10, depth: 10 },
+  ];
+  let shape = $derived(
+    shapes.find((s) => draft && s.width === draft.width && s.height === draft.height && s.depth === draft.depth)?.name ??
+      "Custom",
+  );
+  function setShape(name: string) {
+    const s = shapes.find((s) => s.name === name);
+    if (!draft || !s) return;
+    draft = { ...draft, width: s.width, height: s.height, depth: s.depth };
+    apply();
+  }
+
   function apply() {
     if (draft) store.send({ type: "set_settings", settings: { ...draft } });
   }
@@ -100,6 +117,13 @@
       <h2>Settings</h2>
       <form class="settings" onchange={apply} onsubmit={(e) => e.preventDefault()}>
         <fieldset disabled={!store.isHost}>
+          <label class="wide">
+            <span>Map shape</span>
+            <select value={shape} onchange={(e) => setShape(e.currentTarget.value)}>
+              {#each shapes as s (s.name)}<option>{s.name}</option>{/each}
+              <option disabled>Custom</option>
+            </select>
+          </label>
           {#each numberFields as [key, label, min, max, step, scale]}
             <label>
               <span>{label}</span>
@@ -236,6 +260,12 @@
     gap: 2px;
     font-size: 13px;
     color: var(--muted);
+  }
+  .settings label.wide {
+    grid-column: span 2;
+  }
+  .settings select {
+    padding: 8px 12px;
   }
   .settings label.check {
     flex-direction: row;

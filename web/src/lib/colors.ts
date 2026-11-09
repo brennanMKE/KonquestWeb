@@ -13,6 +13,14 @@ const seatColors = [
   "#b8c45a", // olive
 ];
 
+/** Neutral planets; matches --neutral in app.css. */
+export const neutralHex = "#6b7286";
+
 export function ownerColor(owner: number): string {
   return owner === NEUTRAL ? "var(--neutral)" : seatColors[owner % seatColors.length];
+}
+
+/** Like ownerColor, but always a hex value (for WebGL). */
+export function ownerHex(owner: number): string {
+  return owner === NEUTRAL ? neutralHex : seatColors[owner % seatColors.length];
 }

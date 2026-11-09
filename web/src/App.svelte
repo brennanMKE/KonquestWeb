@@ -1,11 +1,12 @@
 <script lang="ts">
-  import { store } from "./lib/store.svelte";
+  import { hasSeat, load, nameKey, store } from "./lib/store.svelte";
   import Landing from "./lib/Landing.svelte";
   import Lobby from "./lib/Lobby.svelte";
   import Game from "./lib/Game.svelte";
 
   const params = new URLSearchParams(location.search);
-  let room = $state((params.get("room") ?? "").toUpperCase());
+  const startRoom = (params.get("room") ?? "").toUpperCase();
+  let room = $state(startRoom);
   let entered = $state(false);
 
   function enter(code: string, name: string) {
@@ -14,6 +15,9 @@
     entered = true;
     store.join(room, name);
   }
+
+  // A player coming back to a room they hold a seat in rejoins straight away.
+  if (startRoom && hasSeat(startRoom)) enter(startRoom, load(nameKey));
 </script>
 
 {#if !entered}

@@ -69,7 +69,9 @@ Distance is the core skill in this game, so depth has to stay readable.
 
 - **Engine:** 3D from day one. Every planet has (x, y, z), and travel uses 3D distance. A flat map is depth 1 (z = 0). This costs almost nothing.
 - **Client v1:** the flat SVG board. On depth > 1 maps each planet shows its layer as a `z` label and draws larger the higher it is (a 2.5D view), which keeps clicking and iPad play easy. A shadow-and-stalk cue was tried and dropped: it hid under the planets and cluttered the board.
-- **Later:** a "3D map" room option with shallow volumes (e.g. 16 × 16 × 4) first. A full three.js view with camera controls only if playtests show the extra fronts are fun rather than chaotic.
+- **Map shape** (lobby): Flat 16 × 16, Shallow 3D 16 × 16 × 4, Deep 3D 10 × 10 × 10, or custom sizes.
+- **3D view** (optional, any map): a three.js board the player can orbit, with a drop line and floor dot under every planet so height and position read clearly, labels with name and ships, fleets in flight, and the aim line with travel time. A click picks a planet only if the pointer didn't drag, so orbiting never picks by accident. A hidden list of planet buttons keeps it usable by keyboard and screen readers, and planet letters still work. three.js loads only when a player opens the view, and the choice is remembered per browser.
+- Between Greedy players, games last about as long on every shape (mean 74, 71 and 68 rounds over ten seeds for flat, shallow and deep). Whether 3D is more fun than flat is still for playtests to decide; the flat map stays the default.
 - The measure-distance tool matters more in 3D. Show turns for any pair of planets.
 
 ## Turn model
@@ -200,7 +202,7 @@ Validate every client message on the server: it's the sender's turn, they own th
 3. Client: lobby, flat SVG board, order entry, End Turn, turn log.
 4. Fleet overview, standings, measure distance, room options, turn timer, 2.5D height display.
 5. System 1 advisor with oracle and accuracy tooling, save/load, Playwright test, polish.
-6. Later: 3D map option and, if playtests justify it, a three.js board.
+6. 3D map shapes and an optional three.js board.
 
 ## Naming and licensing
 

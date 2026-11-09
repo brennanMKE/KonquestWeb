@@ -34,6 +34,11 @@ function save(key: string, value: string | null) {
 
 export { load, save };
 
+/** Whether this browser holds a seat token for the room. */
+export function hasSeat(room: string): boolean {
+  return load(tokenKey(room.toUpperCase())) !== "";
+}
+
 type ConnState = "connecting" | "open" | "closed";
 
 class Store {

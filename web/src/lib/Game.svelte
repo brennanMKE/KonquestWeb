@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { store } from "./store.svelte";
+  import { load, save, store } from "./store.svelte";
   import { ownerColor } from "./colors";
   import { distance, travelTurns } from "./proto";
   import Board from "./Board.svelte";
@@ -22,6 +22,14 @@
   let measureB = $state<number | null>(null);
 
   let tab = $state<"log" | "fleets" | "standings">("log");
+
+  // The 3D view loads three.js on first use; the choice is remembered.
+  let view3d = $state(load("parallax.view") === "3d");
+  function toggleView() {
+    view3d = !view3d;
+    save("parallax.view", view3d ? "3d" : "2d");
+  }
+  let board3d = $derived(view3d ? import("./Board3D.svelte") : null);
 
   // Turn timer countdown.
   let now = $state(Date.now());
@@ -169,20 +177,36 @@
 
   <main>
     <div class="board-wrap">
-      <Board
-        planets={view.planets}
-        width={settings.width}
-        height={settings.height}
-        depth={settings.depth}
-        shipSpeed={settings.shipSpeed}
-        seat={store.seat}
-        fleets={view.fleets}
-        round={view.round}
-        source={measuring ? measureA : source}
-        dest={measuring ? measureB : dest}
-        onpick={pick}
-        onhover={(id) => (hover = id)}
-      />
+      {#snippet boardProps(Component: typeof Board)}
+        <Component
+          planets={view.planets}
+          width={settings.width}
+          height={settings.height}
+          depth={settings.depth}
+          shipSpeed={settings.shipSpeed}
+          seat={store.seat}
+          fleets={view.fleets}
+          round={view.round}
+          source={measuring ? measureA : source}
+          dest={measuring ? measureB : dest}
+          onpick={pick}
+          onhover={(id) => (hover = id)}
+        />
+      {/snippet}
+      {#if board3d}
+        {#await board3d}
+          <p class="muted">Loading the 3D view…</p>
+        {:then mod}
+          {@render boardProps(mod.default)}
+        {:catch}
+          <p class="error">Couldn't load the 3D view.</p>
+        {/await}
+      {:else}
+        {@render boardProps(Board)}
+      {/if}
+      <button class="view-toggle small" onclick={toggleView} title="Switch between the map and a 3D view you can orbit">
+        {view3d ? "Map view" : "3D view"}
+      </button>
     </div>
 
     <aside>
@@ -387,6 +411,13 @@
     flex: 1;
     min-width: 0;
     padding: 16px;
+    position: relative;
+  }
+  .view-toggle {
+    position: absolute;
+    top: 24px;
+    left: 24px;
+    opacity: 0.85;
   }
   aside {
     width: 340px;

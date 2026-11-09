@@ -2,7 +2,8 @@
 // this only records what the server says and sends intents.
 
 import type { ClientMsg, GameEvent, Phase, PlanetView, SeatInfo, ServerMsg, Settings, Standing, View } from "./proto";
-import { NEUTRAL } from "./proto";
+import { NEUTRAL, SPECTATOR } from "./proto";
+import { play, type Sound } from "./audio";
 
 export interface LogEntry {
   id: number;
@@ -47,6 +48,10 @@ class Store {
   /** Set when the server ended the session for good (removed, replaced). */
   fatal = $state("");
   seat = $state(-1);
+  /** Set once the server has welcomed us. */
+  joined = $state(false);
+  /** Whether we host the room (we may be watching rather than seated). */
+  hosting = $state(false);
   phase = $state<Phase>("lobby");
   host = $state(-1);
   seats = $state<SeatInfo[]>([]);
@@ -63,6 +68,10 @@ class Store {
   standings = $state<Standing[] | null>(null);
   winner = $state(-1);
   toast = $state("");
+  /** The events of the last resolved round, for the board to replay. */
+  lastEvents = $state<{ round: number; events: GameEvent[] } | null>(null);
+  /** Set while the 3D board replays battles; it plays their sounds then. */
+  replays = false;
 
   private ws: WebSocket | null = null;
   private name = "";
@@ -71,7 +80,10 @@ class Store {
   private toastTimer = 0;
 
   get isHost() {
-    return this.seat >= 0 && this.seat === this.host;
+    return this.hosting;
+  }
+  get watching() {
+    return this.seat === SPECTATOR;
   }
   get myTurn() {
     return this.phase === "playing" && this.active === this.seat;
@@ -135,6 +147,8 @@ class Store {
     switch (m.type) {
       case "welcome":
         this.seat = m.seat;
+        this.joined = true;
+        this.hosting = m.host;
         this.token = m.token;
         save(tokenKey(m.room), m.token);
         break;
@@ -147,6 +161,7 @@ class Store {
         this.aiKinds = m.aiKinds;
         break;
       case "your_turn":
+        if (this.active !== this.seat || this.round !== m.round) play("turn");
         this.view = m.view;
         this.round = m.round;
         this.active = this.seat;
@@ -161,6 +176,7 @@ class Store {
       case "fleet_ack": {
         this.view = m.view;
         const f = m.view.fleets.find((f) => f.id === m.fleetId);
+        play("launch");
         if (f) {
           this.addLog(
             this.round,
@@ -172,11 +188,15 @@ class Store {
       case "round_result":
         this.view = m.view;
         for (const e of m.events) this.addEvent(e);
+        // A replaying board plays each battle's sound as its battle ends.
+        if (!this.replays) play(...m.events.map((e) => soundFor(e, this.seat)).filter((s): s is Sound => s !== null));
+        this.lastEvents = { round: m.round, events: m.events };
         break;
       case "seat_status":
         if (this.seats[m.seat]) this.seats[m.seat].connected = m.connected;
         break;
       case "game_over":
+        if (this.phase !== "over") play(m.winner === this.seat ? "win" : "gameover");
         this.standings = m.standings;
         this.winner = m.winner;
         this.phase = "over";
@@ -200,14 +220,14 @@ class Store {
       case "bad_token":
         // The seat is gone. In the lobby we can join fresh; mid-game we can't.
         save(tokenKey(this.room), null);
-        if (this.phase === "lobby" && this.seat < 0) {
+        if (this.phase === "lobby" && !this.joined) {
           this.send({ type: "join", name: this.name });
         } else {
           this.fatal = "Your seat is no longer in this game.";
         }
         break;
       case "wrong_phase":
-        if (this.seat < 0) this.fatal = "This game has already started.";
+        if (!this.joined) this.fatal = "This game has already started.";
         else this.showToast(message);
         break;
       case "room_full":
@@ -259,3 +279,22 @@ class Store {
 }
 
 export const store = new Store();
+
+/** The sound for an event, from seat's side of it. */
+export function soundFor(e: GameEvent, seat: number): Sound | null {
+  if (seat === SPECTATOR) {
+    // A watcher hears every battle the same way.
+    return e.kind === "captured" ? "captured" : e.kind === "held" ? "held" : e.kind === "eliminated" ? "eliminated" : null;
+  }
+  switch (e.kind) {
+    case "reinforced":
+      return "reinforced";
+    case "captured":
+      return e.attacker === seat ? "captured" : e.defender === seat ? "lost" : null;
+    case "held":
+      return e.attacker === seat ? "repelled" : e.defender === seat ? "held" : null;
+    case "eliminated":
+      return "eliminated";
+  }
+  return null;
+}

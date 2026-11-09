@@ -104,7 +104,13 @@ map agreement falls to 77%. That isn't Laya misreading: the sentences there rest
 ship counts, while the oracle sees the real ones. Better estimates of hidden garrisons would close most of
 that gap.
 
-## Planned architecture
+## Watching the computers play
+
+In the lobby, add three computers, tick **Watch only**, and start. The computer delay goes to 3 seconds
+so you can follow each move (set it higher if you like). With no human playing you see everything:
+every fleet, every planet's stats and every battle, replayed in 3D each round.
+
+## Architecture
 
 | Path | What |
 |---|---|

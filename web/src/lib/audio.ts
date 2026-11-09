@@ -1,0 +1,234 @@
+// Sound effects, synthesized with the Web Audio API from oscillators and
+// filtered noise; there are no audio files. The primitives follow System 1
+// Arcade's audio module (same author, MIT).
+
+const STORE_KEY = "parallax.sound";
+const MAX_AT_ONCE = 4;
+
+let enabled = true;
+try {
+  enabled = localStorage.getItem(STORE_KEY) !== "off";
+} catch {
+  // Storage unavailable: sound stays on for this visit.
+}
+
+let ac: AudioContext | null = null;
+let out: GainNode | null = null;
+let noiseBuf: AudioBuffer | null = null;
+
+export const soundOn = () => enabled;
+
+export function setSound(on: boolean) {
+  enabled = on;
+  try {
+    localStorage.setItem(STORE_KEY, on ? "on" : "off");
+  } catch {
+    // Not remembered; fine.
+  }
+  if (on) unlockAudio();
+  else if (ac?.state === "running") ac.suspend().catch(() => {});
+}
+
+/**
+ * Creates or resumes the AudioContext. Browsers keep it suspended until a
+ * user gesture, so this runs on the first key press or click.
+ */
+export function unlockAudio() {
+  if (!enabled) return;
+  if (!ac) {
+    const AC = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AC) return;
+    try {
+      ac = new AC();
+    } catch {
+      return;
+    }
+    const comp = ac.createDynamicsCompressor();
+    comp.connect(ac.destination);
+    out = ac.createGain();
+    out.gain.value = 0.35;
+    out.connect(comp);
+    noiseBuf = ac.createBuffer(1, ac.sampleRate, ac.sampleRate);
+    const d = noiseBuf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  }
+  if (ac.state === "suspended") ac.resume().catch(() => {});
+}
+
+// --- Primitives --------------------------------------------------------------
+
+// env shapes a gain node: a quick attack to vol, then an exponential decay.
+function env(t: number, dur: number, vol: number, attack = 0.004): GainNode {
+  const g = ac!.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.linearRampToValueAtTime(vol, t + attack);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  g.connect(out!);
+  return g;
+}
+
+interface ToneOpts {
+  type?: OscillatorType;
+  vol?: number;
+  to?: number;
+  delay?: number;
+  lowpass?: number;
+  attack?: number;
+}
+
+// tone plays one note, optionally sliding to another pitch.
+function tone(freq: number, dur: number, { type = "square", vol = 0.15, to, delay = 0, lowpass, attack }: ToneOpts = {}) {
+  const t = ac!.currentTime + delay;
+  const o = ac!.createOscillator();
+  o.type = type;
+  o.frequency.setValueAtTime(freq, t);
+  if (to) o.frequency.exponentialRampToValueAtTime(to, t + dur);
+  let node: AudioNode = env(t, dur, vol, attack);
+  if (lowpass) {
+    const f = ac!.createBiquadFilter();
+    f.type = "lowpass";
+    f.frequency.value = lowpass;
+    f.connect(node);
+    node = f;
+  }
+  o.connect(node);
+  o.start(t);
+  o.stop(t + dur + 0.02);
+}
+
+interface NoiseOpts {
+  vol?: number;
+  type?: BiquadFilterType;
+  freq?: number;
+  to?: number;
+  q?: number;
+  delay?: number;
+  attack?: number;
+}
+
+// noise plays filtered white noise; the filter can sweep from freq to `to`.
+function noise(dur: number, { vol = 0.2, type = "lowpass", freq = 2000, to, q = 1, delay = 0, attack }: NoiseOpts = {}) {
+  const t = ac!.currentTime + delay;
+  const s = ac!.createBufferSource();
+  s.buffer = noiseBuf;
+  const f = ac!.createBiquadFilter();
+  f.type = type;
+  f.Q.value = q;
+  f.frequency.setValueAtTime(freq, t);
+  if (to) f.frequency.exponentialRampToValueAtTime(to, t + dur);
+  s.connect(f);
+  f.connect(env(t, dur, vol, attack));
+  s.start(t, Math.random() * 0.5);
+  s.stop(t + dur + 0.02);
+}
+
+// notes plays a sequence of pitches, one every step seconds (0 rests).
+function notes(freqs: number[], step: number, opts: ToneOpts & { len?: number } = {}) {
+  freqs.forEach((f, i) => {
+    if (f) tone(f, opts.len ?? step * 0.9, { ...opts, delay: (opts.delay ?? 0) + i * step });
+  });
+}
+
+// Note frequencies (Hz).
+const A3 = 220.0,
+  C4 = 261.6,
+  E4 = 329.6,
+  G4 = 392.0,
+  A4 = 440.0,
+  C5 = 523.3,
+  D5 = 587.3,
+  E5 = 659.3,
+  G5 = 784.0,
+  C6 = 1046.5;
+
+// --- Sounds ------------------------------------------------------------------
+
+const SOUNDS = {
+  /** It's your turn: a bright two-note chime. */
+  turn: () => notes([G5, C6], 0.09, { type: "triangle", vol: 0.18, len: 0.25 }),
+  /** A fleet leaves: an engine whoosh rising away. */
+  launch: () => {
+    noise(0.45, { vol: 0.16, type: "bandpass", freq: 300, to: 2400, q: 1.4, attack: 0.08 });
+    tone(140, 0.4, { type: "sawtooth", vol: 0.04, to: 420, lowpass: 1200, attack: 0.06 });
+  },
+  /** End turn: a soft click. */
+  end: () => tone(660, 0.04, { type: "triangle", vol: 0.1, to: 440 }),
+  /** Ships join one of your planets. */
+  reinforced: () => notes([C5, E5], 0.06, { type: "triangle", vol: 0.12 }),
+  /** One exchange of fire: a short crackle. Used by the battle animation. */
+  shot: () => {
+    noise(0.08, { vol: 0.12, type: "highpass", freq: 2500 });
+    tone(900, 0.06, { type: "square", vol: 0.03, to: 300 });
+  },
+  /** A ship destroyed: a dull pop. */
+  boom: () => {
+    noise(0.25, { vol: 0.22, freq: 1200, to: 120 });
+    tone(110, 0.2, { type: "triangle", vol: 0.12, to: 45 });
+  },
+  /** You took a planet: a rising fanfare. */
+  captured: () => {
+    notes([C5, E5, G5, C6], 0.08, { vol: 0.08 });
+    notes([C4, E4, G4, C5], 0.08, { type: "triangle", vol: 0.18 });
+  },
+  /** One of your planets held against an attack: a shield ring. */
+  held: () => {
+    tone(A4, 0.5, { type: "sine", vol: 0.15 });
+    tone(A4 * 1.5, 0.5, { type: "sine", vol: 0.08, delay: 0.04 });
+  },
+  /** Your attack failed. */
+  repelled: () => {
+    noise(0.3, { vol: 0.18, type: "bandpass", freq: 600, to: 150, q: 1.2 });
+    tone(196, 0.35, { type: "triangle", vol: 0.15, to: 98 });
+  },
+  /** You lost a planet: falling tones over a rumble. */
+  lost: () => {
+    noise(0.7, { vol: 0.25, freq: 900, to: 60 });
+    notes([E4, C4, A3], 0.14, { type: "sawtooth", vol: 0.07, lowpass: 1400, len: 0.18 });
+  },
+  /** A player is eliminated: a low warble. */
+  eliminated: () => tone(160, 0.9, { type: "sawtooth", vol: 0.08, to: 40, lowpass: 700 }),
+  /** You won the game. */
+  win: () => {
+    notes([C5, E5, G5, C6, 0, G5, C6], 0.11, { vol: 0.08 });
+    notes([C4, G4, C5, E5, 0, D5, E5], 0.11, { type: "triangle", vol: 0.2 });
+  },
+  /** The game ended without you winning. */
+  gameover: () => {
+    const seq = [G4, E4, C4, 196.0];
+    notes(seq, 0.16, { type: "triangle", vol: 0.3, len: 0.2 });
+    notes(seq, 0.16, { type: "square", vol: 0.05, len: 0.14 });
+  },
+};
+
+export type Sound = keyof typeof SOUNDS;
+
+// Most important first: when more sounds are due than we play, the rest are
+// dropped.
+const PRIORITY: Sound[] = [
+  "win",
+  "gameover",
+  "lost",
+  "captured",
+  "eliminated",
+  "held",
+  "repelled",
+  "reinforced",
+  "turn",
+  "launch",
+  "boom",
+  "shot",
+  "end",
+];
+
+/** Plays a set of sounds, the most important few at once. */
+export function play(...names: Sound[]) {
+  if (!enabled || !ac || ac.state !== "running" || names.length === 0) return;
+  const list = [...new Set(names)].sort((a, b) => PRIORITY.indexOf(a) - PRIORITY.indexOf(b));
+  for (const n of list.slice(0, MAX_AT_ONCE)) {
+    try {
+      SOUNDS[n]();
+    } catch {
+      // A failed sound never breaks the game.
+    }
+  }
+}

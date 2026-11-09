@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { SeatInfo, View } from "./proto";
   import { ownerColor } from "./colors";
+  import { SPECTATOR } from "./proto";
 
   // Mid-game standings, from the player's own view only: planet counts are
   // public, production only where visible, ships only for yourself.
@@ -12,9 +13,11 @@
         const planets = view.planets.filter((p) => p.owner === s.seat);
         const hidden = planets.some((p) => p.production === undefined);
         const production = planets.reduce((n, p) => n + (p.production ?? 0), 0);
-        const mine = s.seat === view.seat;
+        // Ship totals: yours always; everyone's for a watcher who sees all.
+        const mine = s.seat === view.seat || (view.seat === SPECTATOR && planets.every((p) => p.ships !== undefined));
+        const fleets = view.fleets.filter((f) => f.owner === s.seat);
         const ships = mine
-          ? planets.reduce((n, p) => n + (p.ships ?? 0), 0) + view.fleets.reduce((n, f) => n + f.ships, 0)
+          ? planets.reduce((n, p) => n + (p.ships ?? 0), 0) + fleets.reduce((n, f) => n + f.ships, 0)
           : null;
         return { s, planets: planets.length, production: hidden ? null : production, ships, alive: view.players[s.seat]?.alive };
       })
@@ -41,6 +44,7 @@
   </tbody>
 </table>
 
+{#if view.seat !== SPECTATOR}
 <dl>
   <dt>Ships built</dt><dd>{view.stats.shipsBuilt}</dd>
   <dt>Ships destroyed</dt><dd>{view.stats.shipsDestroyed}</dd>
@@ -48,6 +52,7 @@
   <dt>Planets conquered</dt><dd>{view.stats.planetsConquered}</dd>
   <dt>Fleets launched</dt><dd>{view.stats.fleetsLaunched}</dd>
 </dl>
+{/if}
 
 <style>
   table {

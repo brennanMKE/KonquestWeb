@@ -73,6 +73,9 @@ Distance is the core skill in this game, so depth has to stay readable.
 - **3D view** (the default on deep maps, optional on any): a three.js board the player can turn and flip freely like a model (trackball rotation, zoom, pan, and a Reset view button). A cube shows a faint lattice of points through its volume; with a drop line and floor dot under every planet so height and position read clearly, labels with name and ships, fleets in flight, and the aim line with travel time. A click picks a planet only if the pointer didn't drag, so orbiting never picks by accident. A hidden list of planet buttons keeps it usable by keyboard and screen readers, and planet letters still work. three.js loads only when a player opens the view, and the choice is remembered per browser.
 - Between Greedy players, games last about as long on every shape (mean 74, 71 and 68 rounds over ten seeds for flat, shallow and deep). Whether 3D is more fun than flat is still for playtests to decide; the flat map stays the default.
 - **Territory:** every block of space (one cell on a flat map, an eighth of the largest side in 3D) belongs to the owner of its nearest planet and is tinted their colour: translucent blocks in the cube, tinted cells on the map. Empires visibly grow as they take planets, and a planet taken deep in enemy space makes a pocket until the planets between join up. Neutral space stays clear. It's computed in the client from planet ownership, which is public.
+- **Camera:** buttons for Top, Front, Side and Corner views, Reset view, and Arrivals, which steps through planets where your fleets land at the end of this round.
+- **Battle replays:** after each round the 3D camera flies to each battle you can see (your own first): the attackers converge, the exchanges flash and crackle, then the planet changes colour or rings as it holds, with the outcome's sound. A click or Esc skips; a toggle turns replays off.
+- **Sound:** synthesized with Web Audio (no files), following System 1 Arcade's approach: your turn, launches, end turn, reinforcements, battle exchanges, captures, holds, losses, eliminations, win and game over. A header toggle turns it off.
 - The measure-distance tool matters more in 3D. Show turns for any pair of planets.
 
 ## Turn model
@@ -154,12 +157,13 @@ Client to server:
 - `add_ai {kind}` / `remove_seat {seat}` (host only, lobby only). `kind` defaults to `greedy`.
 - `replace_with_ai {seat, kind?}` (host only): hand a disconnected player's seat to a computer player.
 - `reroll_map` (host only)
+- `watch {watch}` (host only, lobby only): the host leaves their seat to watch instead of play, or takes a seat again. A watcher's seat is `-2`. In a game with no human players a watcher sees everything (every planet's stats, every fleet, every battle); otherwise only what any player could see.
 - `start_game` (host only)
 - `send_fleet {from, to, ships}`: active player only. Final once accepted.
 - `end_turn`: active player only.
 
 Server to client:
-- `welcome {seat, token, room}`: also re-sent when a seat number changes after a removal.
+- `welcome {seat, token, room, host}`: also re-sent when a seat number changes after a removal or when the host starts or stops watching.
 - `lobby {room, phase, host, seats, settings, mapPreview, aiKinds}`: sent on every lobby change, at game start and at game over. `phase` is `lobby`, `playing` or `over`; `mapPreview` (positions and owners only) is sent only in the lobby. `aiKinds` lists the computer players this server offers (`greedy`, plus `system1` when started with `-system1`).
 - `your_turn {round, view, deadline?}`: sent to the active player.
 - `player_turn {round, seat, name, view, deadline?}`: sent to everyone else, with their own view.

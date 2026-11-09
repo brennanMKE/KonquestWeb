@@ -34,6 +34,28 @@ type View struct {
 	Winner   int          `json:"winner"`
 }
 
+// Spectator is the seat number of someone watching rather than playing.
+const Spectator = -2
+
+// Spectate is the view of someone watching. With full, they see everything:
+// every planet's stats and every fleet (for games with no human players,
+// where nothing can be spoiled). Otherwise they see what any player could.
+func (g *Game) Spectate(full bool) View {
+	v := g.View(Spectator)
+	if !full {
+		return v
+	}
+	for i, p := range g.st.Planets {
+		ships, prod, kill := p.Ships, p.Production, p.Kill
+		v.Planets[i].Ships, v.Planets[i].Production, v.Planets[i].Kill = &ships, &prod, &kill
+	}
+	v.Fleets = slices.Clone(g.st.Fleets)
+	if v.Fleets == nil {
+		v.Fleets = []Fleet{}
+	}
+	return v
+}
+
 // View builds seat's view of the game.
 func (g *Game) View(seat int) View {
 	st := &g.st

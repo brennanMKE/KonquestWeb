@@ -702,3 +702,84 @@ func TestAIKindsAndAsyncAI(t *testing.T) {
 	expect[proto.RoundResult](alice)
 	expect[proto.YourTurn](alice)
 }
+
+func TestHostWatchesComputers(t *testing.T) {
+	r := newRoom(t, Options{})
+	host, w := join(t, r, "Host")
+	if !w.Host || w.Seat != 0 {
+		t.Fatalf("welcome %+v", w)
+	}
+	for range 3 {
+		host.send(&proto.AddAI{})
+	}
+	host.send(&proto.Watch{Watch: true})
+	if w := expect[proto.Welcome](host); w.Seat != rules.Spectator || !w.Host {
+		t.Fatalf("watching welcome %+v", w)
+	}
+	l := expect[proto.Lobby](host)
+	if l.Host != -1 || l.HostName != "Host" || len(l.Seats) != 3 {
+		t.Fatalf("lobby %+v", l)
+	}
+	s := proto.DefaultSettings()
+	s.AIDelayMs, s.MaxRounds = 0, 3
+	host.send(&proto.SetSettings{Settings: s})
+	host.send(&proto.StartGame{})
+
+	// The watcher sees every turn, and with only computers playing, every
+	// fleet and every planet's stats.
+	sawFleet := false
+	for round := 1; round <= 3; round++ {
+		for seat := range 3 {
+			pt := expect[proto.PlayerTurn](host)
+			if pt.Seat != seat || pt.View.Seat != rules.Spectator {
+				t.Fatalf("round %d: %+v", round, pt)
+			}
+			for _, p := range pt.View.Planets {
+				if p.Ships == nil {
+					t.Fatal("watcher can't see a planet's ships")
+				}
+			}
+			sawFleet = sawFleet || len(pt.View.Fleets) > 0
+		}
+		expect[proto.RoundResult](host)
+	}
+	if !sawFleet {
+		t.Error("watcher never saw a fleet")
+	}
+	expect[proto.GameOver](host)
+
+	// A reconnect keeps the watcher watching.
+	r.Leave(host.c)
+	again := connect(t, r)
+	again.send(&proto.Join{Token: expectToken(t, host)})
+	if w := expect[proto.Welcome](again); w.Seat != rules.Spectator || !w.Host {
+		t.Fatalf("rejoin %+v", w)
+	}
+}
+
+func TestWatcherWithHumansSeesOnlyPublic(t *testing.T) {
+	r := newRoom(t, Options{})
+	host, _ := join(t, r, "Host")
+	bob, _ := join(t, r, "Bob")
+	host.send(&proto.AddAI{})
+	host.send(&proto.Watch{Watch: true})
+	if w := expect[proto.Welcome](bob); w.Seat != 0 || w.Host {
+		t.Fatalf("bob renumbered: %+v", w)
+	}
+	host.send(&proto.StartGame{})
+	yt := expect[proto.YourTurn](bob)
+	home := homeOf(yt.View)
+	bob.send(&proto.SendFleet{From: home.ID, To: (home.ID + 1) % len(yt.View.Planets), Ships: 3})
+	expect[proto.FleetAck](bob)
+	bob.send(&proto.EndTurn{})
+	for _, m := range host.pending() {
+		if pt, ok := m.(*proto.PlayerTurn); ok && len(pt.View.Fleets) > 0 {
+			t.Fatal("a watcher in a game with humans saw a fleet")
+		}
+	}
+	// Back to playing is lobby-only.
+	host.send(&proto.Watch{Watch: false})
+	if code := errCode(t, host); code != proto.ErrWrongPhase {
+		t.Fatalf("unwatch mid-game: %s", code)
+	}
+}

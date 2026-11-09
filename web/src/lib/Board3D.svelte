@@ -3,7 +3,9 @@
   import * as THREE from "three";
   import { TrackballControls } from "three/examples/jsm/controls/TrackballControls.js";
   import { CSS2DObject, CSS2DRenderer } from "three/examples/jsm/renderers/CSS2DRenderer.js";
-  import type { Fleet, PlanetView } from "./proto";
+  import type { Fleet, GameEvent, PlanetView } from "./proto";
+  import { play } from "./audio";
+  import { soundFor } from "./store.svelte";
   import { travelTurns } from "./proto";
   import { ownerHex } from "./colors";
   import { territory } from "./territory";
@@ -22,6 +24,8 @@
     dest?: number | null;
     onpick?: (id: number) => void;
     onhover?: (id: number | null) => void;
+    /** The last round's events; each new round's battles are replayed. */
+    replay?: { round: number; events: GameEvent[] } | null;
   }
 
   let {
@@ -37,6 +41,7 @@
     dest = null,
     onpick,
     onhover,
+    replay = null,
   }: Props = $props();
 
   // A shallow map spreads its few layers apart so height reads clearly; a
@@ -136,7 +141,7 @@
 
     for (const p of planets) {
       const at = toWorld(p);
-      const color = new THREE.Color(ownerHex(p.owner));
+      const color = new THREE.Color(ownerHex(shownOwner.get(p.id) ?? p.owner));
       const selected = p.id === source || p.id === dest;
       const mesh = new THREE.Mesh(
         sphere,
@@ -254,9 +259,236 @@
 
   // Rebuild whenever anything shown changes.
   $effect(() => {
-    void [planets, fleets, round, source, dest, hover, seat];
+    void [planets, fleets, round, source, dest, hover, seat, shownOwner];
     rebuild();
   });
+
+  // --- Camera moves -------------------------------------------------------
+
+  // One camera move at a time, eased, toward a position and target.
+  let move: {
+    fromPos: THREE.Vector3;
+    fromTarget: THREE.Vector3;
+    fromUp: THREE.Vector3;
+    toPos: THREE.Vector3;
+    toTarget: THREE.Vector3;
+    toUp: THREE.Vector3;
+    start: number;
+    dur: number;
+    done: () => void;
+  } | null = null;
+
+  function flyTo(pos: THREE.Vector3, target: THREE.Vector3, up: THREE.Vector3, dur = 700): Promise<void> {
+    return new Promise((done) => {
+      move?.done();
+      move = {
+        fromPos: camera.position.clone(),
+        fromTarget: controls.target.clone(),
+        fromUp: camera.up.clone(),
+        toPos: pos.clone(),
+        toTarget: target.clone(),
+        toUp: up.clone().normalize(),
+        start: performance.now(),
+        dur,
+        done,
+      };
+    });
+  }
+
+  function stepMove(now: number) {
+    if (!move) return;
+    const t = Math.min(1, (now - move.start) / move.dur);
+    const k = t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2; // ease in-out
+    camera.position.lerpVectors(move.fromPos, move.toPos, k);
+    controls.target.lerpVectors(move.fromTarget, move.toTarget, k);
+    camera.up.lerpVectors(move.fromUp, move.toUp, k).normalize();
+    camera.lookAt(controls.target);
+    if (t >= 1) {
+      const m = move;
+      move = null;
+      m.done();
+    }
+  }
+
+  const span = () => Math.max(width, height, depth * layerGap);
+  const presets: Record<string, [THREE.Vector3, THREE.Vector3]> = {
+    Top: [new THREE.Vector3(0, 2.3, 0.001), new THREE.Vector3(0, 0, -1)],
+    Front: [new THREE.Vector3(0, 0, 2.3), new THREE.Vector3(0, 1, 0)],
+    Side: [new THREE.Vector3(2.3, 0, 0), new THREE.Vector3(0, 1, 0)],
+    Corner: [new THREE.Vector3(0.7, 0.9, 1.75), new THREE.Vector3(0, 1, 0)],
+  };
+  function viewFrom(name: string) {
+    const [dir, up] = presets[name];
+    flyTo(dir.clone().multiplyScalar(span()), new THREE.Vector3(), up);
+  }
+
+  // Focus on a planet from the current direction, close enough to see it.
+  function focusOn(id: number, dur = 700) {
+    const at = toWorld(planets[id]);
+    const dir = camera.position.clone().sub(controls.target).normalize();
+    // Far enough back to see the planet's neighbourhood, not just its tint.
+    return flyTo(at.clone().add(dir.multiplyScalar(Math.max(12, span() * 0.45))), at, camera.up, dur);
+  }
+
+  // Arrivals: planets where our fleets land at the end of this round.
+  let arrivals = $derived([
+    ...new Set(fleets.filter((f) => f.owner === seat && f.arrivalRound <= round).map((f) => f.to)),
+  ]);
+  let arrivalIndex = 0;
+  function nextArrival() {
+    if (!arrivals.length) return;
+    const id = arrivals[arrivalIndex++ % arrivals.length];
+    focusOn(id);
+    hover = id;
+    onhover?.(id);
+  }
+
+  // --- Battle replays -----------------------------------------------------
+
+  // While a battle plays, a planet shows its owner from before it.
+  let shownOwner = $state(new Map<number, number>());
+  let replayed = -1;
+  let replaying = $state(false);
+  let skip = false;
+  const fx = new THREE.Group();
+  type Anim = (now: number) => boolean; // returns true when finished
+  let anims: Anim[] = [];
+
+  const wait = (ms: number) => new Promise<void>((r) => setTimeout(r, skip ? 0 : ms));
+
+  $effect(() => {
+    if (replay && replay.round !== replayed && renderer) {
+      replayed = replay.round;
+      runReplay(replay.events);
+    }
+  });
+
+  async function runReplay(events: GameEvent[]) {
+    const battles = events
+      .filter((e) => (e.kind === "captured" || e.kind === "held") && e.planet >= 0)
+      // Our own battles first, then the biggest.
+      .sort((a, b) => Number(involves(b)) - Number(involves(a)) || b.ships - a.ships)
+      .slice(0, 6);
+    if (!battles.length) {
+      play(...events.map((e) => soundFor(e, seat)).filter((s) => s !== null));
+      return;
+    }
+    replaying = true;
+    skip = false;
+    // Show every battled planet as it was before the round.
+    const before = new Map<number, number>();
+    for (const e of [...battles].reverse()) if (e.kind === "captured") before.set(e.planet, e.defender);
+    shownOwner = before;
+    const home = { pos: camera.position.clone(), target: controls.target.clone(), up: camera.up.clone() };
+    for (const e of battles) {
+      if (skip) break;
+      await focusOn(e.planet, 650);
+      await battle(e);
+    }
+    shownOwner = new Map();
+    for (const a of anims) a(Infinity);
+    anims = [];
+    if (skip) {
+      play(...events.map((e) => soundFor(e, seat)).filter((s) => s !== null));
+      skip = false;
+    }
+    await flyTo(home.pos, home.target, home.up, 600);
+    replaying = false;
+  }
+
+  const involves = (e: GameEvent) => e.attacker === seat || e.defender === seat || seat === -2;
+
+  // One battle: the attackers converge on the planet, the exchanges flash,
+  // then the planet changes hands (or rings, if it held).
+  async function battle(e: GameEvent) {
+    const at = toWorld(planets[e.planet]);
+    const attackColor = new THREE.Color(ownerHex(e.attacker));
+    const ships = Math.min(10, Math.max(2, Math.round(Math.sqrt(e.ships))));
+    const cone = new THREE.ConeGeometry(0.1 * unit, 0.3 * unit, 10);
+    const mat = new THREE.MeshBasicMaterial({ color: attackColor });
+    const start = performance.now();
+    for (let i = 0; i < ships; i++) {
+      const from = at.clone().add(new THREE.Vector3().randomDirection().multiplyScalar(4 * unit));
+      const m = new THREE.Mesh(cone, mat);
+      m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), at.clone().sub(from).normalize());
+      fx.add(m);
+      const delay = i * 40;
+      anims.push((now) => {
+        const t = Math.min(1, Math.max(0, (now - start - delay) / 700));
+        m.position.lerpVectors(from, at, t * 0.8);
+        if (t >= 1 || now === Infinity) {
+          fx.remove(m);
+          return true;
+        }
+        return false;
+      });
+    }
+    await wait(650);
+
+    // Exchanges: a flash for each burst of losses, near the planet.
+    const flashes = Math.min(12, Math.max(3, Math.round(Math.sqrt(e.attackerLost + e.defenderLost) * 2)));
+    for (let i = 0; i < flashes && !skip; i++) {
+      flash(at.clone().add(new THREE.Vector3().randomDirection().multiplyScalar(0.6 * unit)), i % 2 ? 0xffd27a : 0xffffff);
+      play(i % 3 === 2 ? "boom" : "shot");
+      await wait(110);
+    }
+
+    // Outcome.
+    if (e.kind === "captured") {
+      const next = new Map(shownOwner);
+      next.delete(e.planet);
+      shownOwner = next;
+    }
+    ring(at, new THREE.Color(ownerHex(e.kind === "captured" ? e.attacker : e.defender)));
+    const s = soundFor(e, seat);
+    if (s) play(s);
+    await wait(700);
+    cone.dispose();
+    mat.dispose();
+  }
+
+  function flash(at: THREE.Vector3, color: number) {
+    const m = new THREE.Mesh(sphere, new THREE.MeshBasicMaterial({ color, transparent: true }));
+    m.position.copy(at);
+    fx.add(m);
+    const start = performance.now();
+    anims.push((now) => {
+      const t = Math.min(1, (now - start) / 300);
+      m.scale.setScalar((0.1 + t * 0.35) * unit);
+      (m.material as THREE.MeshBasicMaterial).opacity = 1 - t;
+      if (t >= 1) {
+        fx.remove(m);
+        (m.material as THREE.Material).dispose();
+        return true;
+      }
+      return false;
+    });
+  }
+
+  function ring(at: THREE.Vector3, color: THREE.Color) {
+    const geo = new THREE.TorusGeometry(1, 0.04, 8, 48);
+    const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color, transparent: true }));
+    m.position.copy(at);
+    m.lookAt(camera.position);
+    fx.add(m);
+    const start = performance.now();
+    anims.push((now) => {
+      const t = Math.min(1, (now - start) / 800);
+      m.scale.setScalar((0.4 + t * 1.6) * unit);
+      (m.material as THREE.MeshBasicMaterial).opacity = 1 - t;
+      if (t >= 1) {
+        fx.remove(m);
+        geo.dispose();
+        (m.material as THREE.Material).dispose();
+        return true;
+      }
+      return false;
+    });
+  }
+
+  function skipReplay() {
+    if (replaying) skip = true;
+  }
 
   // Picking: a click is a press and release without much dragging, so
   // orbiting the camera never picks a planet by accident.
@@ -290,6 +522,7 @@
     scene.add(sun);
     dynamic = new THREE.Group();
     scene.add(dynamic);
+    scene.add(fx);
     buildFrame();
 
     const span = Math.max(width, height, depth * layerGap);
@@ -313,7 +546,14 @@
 
     let down: { x: number; y: number } | null = null;
     const el = renderer.domElement;
-    const onDown = (e: PointerEvent) => (down = { x: e.clientX, y: e.clientY });
+    const onDown = (e: PointerEvent) => {
+      skipReplay();
+      down = { x: e.clientX, y: e.clientY };
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") skipReplay();
+    };
+    window.addEventListener("keydown", onKey);
     const onUp = (e: PointerEvent) => {
       if (down && Math.hypot(e.clientX - down.x, e.clientY - down.y) < 6) {
         const id = planetAt(e);
@@ -356,7 +596,10 @@
     let frame = 0;
     const loop = () => {
       frame = requestAnimationFrame(loop);
-      controls.update();
+      const now = performance.now();
+      if (move) stepMove(now);
+      else controls.update();
+      anims = anims.filter((a) => !a(now));
       for (const r of rings) r.lookAt(camera.position);
       renderer.render(scene, camera);
       labels.render(scene, camera);
@@ -364,6 +607,7 @@
     loop();
 
     return () => {
+      window.removeEventListener("keydown", onKey);
       cancelAnimationFrame(frame);
       ro.disconnect();
       controls.dispose();
@@ -379,7 +623,23 @@
 
 <div class="board3d" bind:this={host} data-testid="board-3d">
   {#if webgl}
-    <button class="reset small" onclick={() => resetView()} title="Put the camera back where it started">Reset view</button>
+    <div class="views" role="toolbar" aria-label="Camera">
+      {#each Object.keys(presets) as name (name)}
+        <button class="small" onclick={() => viewFrom(name)} title="View the map from the {name.toLowerCase()}">{name}</button>
+      {/each}
+      <button
+        class="small"
+        onclick={nextArrival}
+        disabled={!arrivals.length}
+        title="Focus on planets where your fleets arrive at the end of this round"
+      >
+        Arrivals{arrivals.length ? ` (${arrivals.length})` : ""}
+      </button>
+      <button class="small" onclick={() => resetView()} title="Put the camera back where it started">Reset view</button>
+    </div>
+    {#if replaying}
+      <p class="replaying">Replaying battles · click or Esc to skip</p>
+    {/if}
     <p class="hint">Drag to turn · scroll to zoom · right-drag to pan</p>
   {/if}
   {#if !webgl}
@@ -430,11 +690,28 @@
   .board3d :global(.tag.aim) {
     font-weight: 400;
   }
-  .reset {
+  .views {
     position: absolute;
     top: 8px;
     right: 8px;
-    opacity: 0.85;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 4px;
+    max-width: 70%;
+    opacity: 0.9;
+  }
+  .replaying {
+    position: absolute;
+    bottom: 28px;
+    left: 50%;
+    transform: translateX(-50%);
+    margin: 0;
+    padding: 4px 10px;
+    border-radius: 6px;
+    background: rgb(19 24 40 / 0.85);
+    font-size: 13px;
+    pointer-events: none;
   }
   .hint {
     position: absolute;

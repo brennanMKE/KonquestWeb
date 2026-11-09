@@ -57,6 +57,9 @@ type seat struct {
 	aiKind string
 	token  string
 	client *Client
+	// watching is set on the host while they watch instead of playing; a
+	// watching host isn't in Room.seats.
+	watching bool
 }
 
 // Room is one game room.
@@ -214,7 +217,18 @@ func (r *Room) drop(c *Client) {
 	}
 }
 
+// members are everyone with a seat or watching.
+func (r *Room) members() []*seat {
+	if r.host != nil && r.host.watching {
+		return append(slices.Clone(r.seats), r.host)
+	}
+	return r.seats
+}
+
 func (r *Room) broadcastSeatStatus(s *seat) {
+	if s.watching {
+		return
+	}
 	msg := &proto.SeatStatus{Seat: r.seatIndex(s), Connected: s.client != nil}
 	for c := range r.clients {
 		r.send(c, msg)
@@ -223,7 +237,7 @@ func (r *Room) broadcastSeatStatus(s *seat) {
 
 // armIdle starts the idle timer if no human is connected.
 func (r *Room) armIdle() {
-	for _, s := range r.seats {
+	for _, s := range r.members() {
 		if s.client != nil {
 			return
 		}
@@ -244,7 +258,7 @@ func (r *Room) armIdle() {
 }
 
 func (r *Room) anyConnected() bool {
-	for _, s := range r.seats {
+	for _, s := range r.members() {
 		if s.client != nil {
 			return true
 		}
@@ -307,6 +321,10 @@ func (r *Room) handle(c *Client, data []byte) {
 	case *proto.StartGame:
 		if r.hostLobby(c, s) {
 			r.start(c)
+		}
+	case *proto.Watch:
+		if r.hostLobby(c, s) {
+			r.setWatching(c, m.Watch)
 		}
 	case *proto.ReplaceWithAI:
 		if r.isHost(c, s) {
@@ -372,7 +390,7 @@ func (r *Room) join(c *Client, j *proto.Join) {
 	}
 	var s *seat
 	if j.Token != "" {
-		for _, x := range r.seats {
+		for _, x := range r.members() {
 			if x.kind == proto.KindHuman && x.token == j.Token {
 				s = x
 			}
@@ -407,7 +425,7 @@ func (r *Room) join(c *Client, j *proto.Join) {
 	}
 	s.client = c
 	r.clients[c] = s
-	r.send(c, &proto.Welcome{Seat: r.seatIndex(s), Token: s.token, Room: r.code})
+	r.welcome(s)
 	r.broadcastLobby()
 	r.broadcastSeatStatus(s)
 	switch r.phase {
@@ -487,13 +505,58 @@ func (r *Room) removeSeat(c *Client, i int) {
 		r.clients[s.client] = nil
 		r.drop(s.client)
 	}
-	// Seat numbers after i moved down; tell those players.
+	r.renumber(i)
+	r.broadcastLobby()
+}
+
+// welcome tells s's client its seat and whether it hosts.
+func (r *Room) welcome(s *seat) {
+	n := r.seatIndex(s)
+	if s.watching {
+		n = rules.Spectator
+	}
+	r.send(s.client, &proto.Welcome{Seat: n, Token: s.token, Room: r.code, Host: s == r.host})
+}
+
+// renumber re-welcomes the players from seat i on, after seats moved down.
+func (r *Room) renumber(i int) {
 	for j := i; j < len(r.seats); j++ {
-		if x := r.seats[j]; x.client != nil {
-			r.send(x.client, &proto.Welcome{Seat: j, Token: x.token, Room: r.code})
+		r.welcome(r.seats[j])
+	}
+}
+
+// setWatching moves the host out of the seats to watch, or back in to play.
+func (r *Room) setWatching(c *Client, watch bool) {
+	h := r.host
+	switch {
+	case watch == h.watching:
+		return
+	case watch:
+		i := r.seatIndex(h)
+		r.seats = slices.Delete(r.seats, i, i+1)
+		h.watching = true
+		r.renumber(i)
+	default:
+		if len(r.seats) >= rules.MaxPlayers {
+			r.sendError(c, proto.ErrRoomFull, "the room is full; remove a seat first")
+			return
+		}
+		h.watching = false
+		r.seats = append(r.seats, h)
+	}
+	r.welcome(h)
+	r.broadcastLobby()
+}
+
+// allComputers reports whether no human plays, so watchers may see
+// everything.
+func (r *Room) allComputers() bool {
+	for _, s := range r.seats {
+		if s.kind == proto.KindHuman {
+			return false
 		}
 	}
-	r.broadcastLobby()
+	return true
 }
 
 func (r *Room) start(c *Client) {
@@ -571,12 +634,20 @@ func (r *Room) finishTurn(seatN int) {
 		for i, s := range r.seats {
 			r.send(s.client, &proto.RoundResult{Round: round, Events: nonNil(rules.FilterEvents(events, i)), View: r.game.View(i)})
 		}
+		if h := r.host; h != nil && h.watching {
+			full := r.allComputers()
+			seen := events
+			if !full {
+				seen = rules.FilterEvents(events, rules.Spectator)
+			}
+			r.send(h.client, &proto.RoundResult{Round: round, Events: nonNil(seen), View: r.game.Spectate(full)})
+		}
 	}
 	if r.game.Over() {
 		r.phase = proto.PhaseOver
 		r.log.Info("game over", "winner", r.game.Winner(), "round", round)
 		msg := r.gameOverMsg()
-		for _, s := range r.seats {
+		for _, s := range r.members() {
 			r.send(s.client, msg)
 		}
 		r.broadcastLobby()
@@ -612,7 +683,7 @@ func (r *Room) announceTurn() {
 			r.finishTurn(r.game.Active())
 		})
 	}
-	for _, x := range r.seats {
+	for _, x := range r.members() {
 		r.sendTurn(x)
 	}
 	switch {
@@ -625,6 +696,11 @@ func (r *Room) announceTurn() {
 
 func (r *Room) sendTurn(s *seat) {
 	i, active := r.seatIndex(s), r.game.Active()
+	if s.watching {
+		r.send(s.client, &proto.PlayerTurn{Round: r.game.Round(), Seat: active, Name: r.seats[active].name,
+			View: r.game.Spectate(r.allComputers()), Deadline: r.deadline})
+		return
+	}
 	if i == active {
 		r.send(s.client, &proto.YourTurn{Round: r.game.Round(), View: r.game.View(i), Deadline: r.deadline})
 		return
@@ -705,7 +781,11 @@ func (r *Room) seatInfos() []proto.SeatInfo {
 }
 
 func (r *Room) broadcastLobby() {
-	msg := &proto.Lobby{Room: r.code, Phase: r.phase, Host: r.seatIndex(r.host),
+	hostName := ""
+	if r.host != nil {
+		hostName = r.host.name
+	}
+	msg := &proto.Lobby{Room: r.code, Phase: r.phase, Host: r.seatIndex(r.host), HostName: hostName,
 		Seats: r.seatInfos(), Settings: r.settings, MapPreview: r.mapPreview(), AIKinds: r.aiKinds()}
 	for c, s := range r.clients {
 		if s != nil {

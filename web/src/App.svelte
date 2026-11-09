@@ -27,7 +27,7 @@
     <p>{store.fatal}</p>
     <a href="/">Back to the start</a>
   </main>
-{:else if store.seat < 0}
+{:else if !store.joined}
   <main class="message"><p class="muted">Joining room {room}…</p></main>
 {:else if store.phase === "lobby"}
   <Lobby />

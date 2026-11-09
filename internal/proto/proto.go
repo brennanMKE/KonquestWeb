@@ -93,6 +93,12 @@ type ReplaceWithAI struct {
 	Seat int    `json:"seat"`
 	Kind string `json:"kind,omitempty"`
 }
+
+// Watch makes the host a watcher instead of a player, or a player again.
+// Lobby only.
+type Watch struct {
+	Watch bool `json:"watch"`
+}
 type RerollMap struct{}
 type StartGame struct{}
 type SendFleet struct {
@@ -104,10 +110,13 @@ type EndTurn struct{}
 
 // Server to client.
 
+// Welcome tells a client its seat (rules.Spectator when watching) and
+// whether it hosts the room.
 type Welcome struct {
 	Seat  int    `json:"seat"`
 	Token string `json:"token"`
 	Room  string `json:"room"`
+	Host  bool   `json:"host"`
 }
 
 // SeatInfo describes one seat in the lobby or game.
@@ -119,9 +128,11 @@ type SeatInfo struct {
 	Connected bool   `json:"connected"`
 }
 type Lobby struct {
-	Room       string             `json:"room"`
-	Phase      string             `json:"phase"`
+	Room  string `json:"room"`
+	Phase string `json:"phase"`
+	// Host is the host's seat, or -1 when the host is watching.
 	Host       int                `json:"host"`
+	HostName   string             `json:"hostName"`
 	Seats      []SeatInfo         `json:"seats"`
 	Settings   Settings           `json:"settings"`
 	MapPreview []rules.PlanetView `json:"mapPreview"`
@@ -175,6 +186,7 @@ var types = map[string]func() any{
 	"remove_seat":     func() any { return &RemoveSeat{} },
 	"replace_with_ai": func() any { return &ReplaceWithAI{} },
 	"reroll_map":      func() any { return &RerollMap{} },
+	"watch":           func() any { return &Watch{} },
 	"start_game":      func() any { return &StartGame{} },
 	"send_fleet":      func() any { return &SendFleet{} },
 	"end_turn":        func() any { return &EndTurn{} },

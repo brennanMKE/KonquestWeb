@@ -1,6 +1,8 @@
 // Wire types. These mirror internal/proto and internal/rules in Go.
 
 export const NEUTRAL = -1;
+/** The seat of someone watching rather than playing. */
+export const SPECTATOR = -2;
 
 export interface Pos {
   x: number;
@@ -99,12 +101,13 @@ export interface SeatInfo {
 export type Phase = "lobby" | "playing" | "over";
 
 export type ServerMsg =
-  | { type: "welcome"; seat: number; token: string; room: string }
+  | { type: "welcome"; seat: number; token: string; room: string; host: boolean }
   | {
       type: "lobby";
       room: string;
       phase: Phase;
       host: number;
+      hostName: string;
       seats: SeatInfo[];
       settings: Settings;
       mapPreview: PlanetView[] | null;
@@ -125,6 +128,7 @@ export type ClientMsg =
   | { type: "remove_seat"; seat: number }
   | { type: "replace_with_ai"; seat: number; kind?: string }
   | { type: "reroll_map" }
+  | { type: "watch"; watch: boolean }
   | { type: "start_game" }
   | { type: "send_fleet"; from: number; to: number; ships: number }
   | { type: "end_turn" };

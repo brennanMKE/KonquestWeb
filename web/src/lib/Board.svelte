@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Fleet, PlanetView } from "./proto";
+  import type { Fleet, GameEvent, PlanetView } from "./proto";
   import { travelTurns } from "./proto";
   import { ownerColor } from "./colors";
   import { territory } from "./territory";
@@ -17,6 +17,8 @@
     dest?: number | null;
     onpick?: (id: number) => void;
     onhover?: (id: number | null) => void;
+    /** Battle replays are a 3D view feature; the map ignores this. */
+    replay?: { round: number; events: GameEvent[] } | null;
   }
 
   let {

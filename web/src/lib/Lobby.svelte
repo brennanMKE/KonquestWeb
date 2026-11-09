@@ -1,5 +1,6 @@
 <script lang="ts">
   import { store } from "./store.svelte";
+  import { unlockAudio } from "./audio";
   import { ownerColor } from "./colors";
   import Board from "./Board.svelte";
   import type { Settings } from "./proto";
@@ -38,6 +39,16 @@
     apply();
   }
 
+  // Watching: the host leaves their seat to watch the computers play. A
+  // watcher wants time to follow each move, so the delay goes to 3 s.
+  function setWatch(watch: boolean) {
+    store.send({ type: "watch", watch });
+    if (watch && draft && draft.aiDelayMs < 3000) {
+      draft = { ...draft, aiDelayMs: 3000 };
+      apply();
+    }
+  }
+
   function apply() {
     if (draft) store.send({ type: "set_settings", settings: { ...draft } });
   }
@@ -72,6 +83,8 @@
   ];
 </script>
 
+<svelte:window onpointerdown={unlockAudio} />
+
 <main class="lobby">
   <section class="left">
     <h1>Room {store.room}</h1>
@@ -87,7 +100,7 @@
           <span class="dot" style:background={ownerColor(s.seat)}></span>
           <span class="name">{s.name}</span>
           {#if s.seat === store.seat}<span class="badge">you</span>{/if}
-          {#if s.seat === store.host}<span class="badge">host</span>{/if}
+          {#if s.seat === store.host && store.host >= 0}<span class="badge">host</span>{/if}
           {#if s.kind === "ai"}<span class="badge">{aiNames[s.aiKind ?? ""]?.replace(/ \(.*\)$/, "") ?? "computer"}</span>{/if}
           {#if !s.connected}<span class="badge warn">away</span>{/if}
           {#if store.isHost && s.seat !== store.host}
@@ -97,7 +110,14 @@
       {/each}
     </ul>
 
+    {#if store.watching}
+      <p class="muted">You're watching{store.isHost ? " and hosting" : ""}. You won't take a seat.</p>
+    {/if}
     {#if store.isHost}
+      <label class="check watch">
+        <input type="checkbox" checked={store.watching} onchange={(e) => setWatch(e.currentTarget.checked)} />
+        <span>Watch only: I don't play, the computers do</span>
+      </label>
       <div class="actions">
         <span class="add-ai">
           <button onclick={() => store.send({ type: "add_ai", kind: aiKind })} disabled={store.seats.length >= 9}>
@@ -232,6 +252,12 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+  .watch {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 12px;
   }
   .add-ai {
     display: flex;

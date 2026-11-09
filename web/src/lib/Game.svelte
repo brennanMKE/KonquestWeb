@@ -1,5 +1,6 @@
 <script lang="ts">
   import { load, save, store } from "./store.svelte";
+  import { play, setSound, soundOn, unlockAudio } from "./audio";
   import { ownerColor } from "./colors";
   import { distance, travelTurns } from "./proto";
   import Board from "./Board.svelte";
@@ -33,6 +34,16 @@
     save("parallax.view", view3d ? "3d" : "2d");
   }
   let board3d = $derived(view3d ? import("./Board3D.svelte") : null);
+
+  // Battle replays in the 3D view, on unless turned off.
+  let replays = $state(load("parallax.replays") !== "off");
+  function toggleReplays() {
+    replays = !replays;
+    save("parallax.replays", replays ? "on" : "off");
+  }
+  $effect(() => {
+    store.replays = view3d && replays;
+  });
 
   // Turn timer countdown.
   let now = $state(Date.now());
@@ -107,11 +118,19 @@
 
   function endTurn() {
     cancel();
+    play("end");
     store.send({ type: "end_turn" });
+  }
+
+  let sound = $state(soundOn());
+  function toggleSound() {
+    sound = !sound;
+    setSound(sound);
   }
 
   // Keyboard: planet letters pick planets, Esc cancels, as in the original.
   function onkey(e: KeyboardEvent) {
+    unlockAudio();
     if (e.key === "Escape") {
       if (measuring) toggleMeasure();
       else cancel();
@@ -139,7 +158,7 @@
   });
 </script>
 
-<svelte:window onkeydown={onkey} />
+<svelte:window onkeydown={onkey} onpointerdown={unlockAudio} />
 
 <div class="game">
   <header>
@@ -160,6 +179,9 @@
       <span class="timer" class:low={secondsLeft <= 10}>{Math.floor(secondsLeft / 60)}:{String(secondsLeft % 60).padStart(2, "0")}</span>
     {/if}
     <span class="spacer"></span>
+    <button class="small sound" onclick={toggleSound} aria-pressed={sound} title={sound ? "Turn sound off" : "Turn sound on"}>
+      {sound ? "Sound on" : "Sound off"}
+    </button>
     {#if store.isHost}
       <a class="save" href="/api/rooms/{store.room}/save?token={store.token}" download>Save game</a>
     {/if}
@@ -194,6 +216,7 @@
           dest={measuring ? measureB : dest}
           onpick={pick}
           onhover={(id) => (hover = id)}
+          replay={replays ? store.lastEvents : null}
         />
       {/snippet}
       {#if board3d}
@@ -207,15 +230,25 @@
       {:else}
         {@render boardProps(Board)}
       {/if}
-      <button class="view-toggle small" onclick={toggleView} title="Switch between the map and a 3D view you can orbit">
-        {view3d ? "Map view" : "3D view"}
-      </button>
+      <div class="view-toggle">
+        <button class="small" onclick={toggleView} title="Switch between the map and a 3D view you can turn">
+          {view3d ? "Map view" : "3D view"}
+        </button>
+        {#if view3d}
+          <button class="small" onclick={toggleReplays} aria-pressed={replays} title="Replay each round's battles in 3D">
+            Replays {replays ? "on" : "off"}
+          </button>
+        {/if}
+      </div>
     </div>
 
     <aside>
       <section class="orders">
         {#if store.phase === "over"}
           <p>The game is over.</p>
+        {:else if store.watching}
+          <p>You're watching. {activeName} is moving.</p>
+          <p class="hint">Drag to turn the map. Each round's battles replay in 3D.</p>
         {:else if !alive}
           <p class="muted">You've been eliminated. You can keep watching.</p>
         {:else if !store.myTurn}
@@ -420,7 +453,10 @@
     position: absolute;
     top: 24px;
     left: 24px;
+    display: flex;
+    gap: 4px;
     opacity: 0.85;
+    z-index: 1;
   }
   aside {
     width: 340px;

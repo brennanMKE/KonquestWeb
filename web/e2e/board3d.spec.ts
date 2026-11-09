@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-test("the 3D view renders a deep map and picks planets by mouse and keyboard", async ({ page }) => {
+test("a cube opens in the 3D view, turns freely and picks planets by mouse and keyboard", async ({ page }) => {
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(String(e)));
 
@@ -8,29 +8,30 @@ test("the 3D view renders a deep map and picks planets by mouse and keyboard", a
   await page.getByLabel("Your name").fill("Alice");
   await page.getByRole("button", { name: "Create game" }).click();
   await page.getByRole("button", { name: "Add computer" }).click();
-  await page.getByLabel("Map shape").selectOption("Deep 3D");
-  await expect(page.getByLabel("Depth (1 = flat)")).toHaveValue("10");
+  // The default map is the 32-cube, and it opens in the 3D view.
+  await expect(page.getByLabel("Map shape")).toHaveValue("Cube 32³");
+  await expect(page.getByLabel("Depth (1 = flat)")).toHaveValue("32");
   await page.getByRole("button", { name: "Start game" }).click();
   await expect(page.getByText("Your turn")).toBeVisible();
-
-  await page.getByRole("button", { name: "3D view" }).click();
   const board = page.getByTestId("board-3d");
+
+  // Turn the cube right over, then put it back.
+  const box = (await board.boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height * 0.3);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height * 0.9, { steps: 12 });
+  await page.mouse.up();
+  await page.waitForTimeout(300);
+  await board.getByRole("button", { name: "Reset view" }).click();
   await expect(board.locator("canvas")).toBeVisible();
   await expect(board.locator(".tag.mine")).toHaveCount(1);
 
-  // Mouse: the planet sits a little below its label (how far depends on the
-  // camera), so move down from the label until hovering shows the planet,
-  // then click once (a second click on the source cancels it).
+  // Mouse: a label sits just right of its planet's centre (9px left and
+  // 14px down from the label's corner is the planet).
   await page.waitForTimeout(300);
   const tag = (await board.locator(".tag.mine").boundingBox())!;
-  const home = (await board.locator(".tag.mine").innerText()).split(" ")[0];
-  const info = page.locator(".info h3");
-  let y = tag.y + tag.height / 2;
-  for (; y < tag.y + 80; y += 3) {
-    await page.mouse.move(tag.x + tag.width / 2, y);
-    if ((await info.count()) && (await info.innerText()).includes(`Planet ${home}`)) break;
-  }
-  await page.mouse.click(tag.x + tag.width / 2, y);
+  await page.mouse.move(tag.x - 9, tag.y + 14);
+  await page.mouse.click(tag.x - 9, tag.y + 14);
   const sending = page.getByText(/^Sending from /);
   await expect(sending).toBeVisible();
 

@@ -38,6 +38,9 @@ test("two players take turns and one captures a neutral", async ({ browser }) =>
   await bob.getByRole("button", { name: /^Join game/ }).click();
   await expect(alice.getByText("Bob")).toBeVisible();
   await expect(bob.getByText("Waiting for the host")).toBeVisible();
+  // This test plays on the flat map view.
+  await alice.getByLabel("Map shape").selectOption("Flat");
+  await expect(alice.getByLabel("Depth (1 = flat)")).toHaveValue("1");
 
   await alice.getByRole("button", { name: "Start game" }).click();
   await expect(alice.getByText("Your turn")).toBeVisible();

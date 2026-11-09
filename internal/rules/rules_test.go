@@ -769,3 +769,66 @@ func TestInvariants(t *testing.T) {
 		}
 	}
 }
+
+func TestSectors(t *testing.T) {
+	cube := DefaultSettings()
+	cube.Width, cube.Height, cube.Depth, cube.Neutrals = 32, 32, 32, 16
+	for _, s := range []Settings{DefaultSettings(), cube} {
+		planets := 4 + s.Neutrals
+		secs := Sectors(s, planets)
+		if float64(len(secs)) < float64(planets)*sectorRoom {
+			t.Fatalf("%dx%dx%d: only %d sectors for %d planets", s.Width, s.Height, s.Depth, len(secs), planets)
+		}
+		// The sectors tile the map exactly.
+		cells := 0
+		for _, sec := range secs {
+			cells += (sec.Max.X - sec.Min.X) * (sec.Max.Y - sec.Min.Y) * (sec.Max.Z - sec.Min.Z)
+		}
+		if cells != s.Width*s.Height*s.Depth {
+			t.Fatalf("sectors cover %d cells, map has %d", cells, s.Width*s.Height*s.Depth)
+		}
+		in := func(p Pos) int {
+			for i, sec := range secs {
+				if p.X >= sec.Min.X && p.X < sec.Max.X && p.Y >= sec.Min.Y && p.Y < sec.Max.Y && p.Z >= sec.Min.Z && p.Z < sec.Max.Z {
+					return i
+				}
+			}
+			return -1
+		}
+		for seed := range uint64(20) {
+			g := must(New(4, s, seed))
+			seen := map[int]bool{}
+			for _, p := range g.State().Planets {
+				i := in(p.Pos)
+				if i < 0 || seen[i] {
+					t.Fatalf("seed %d: planet %s at %v shares a sector", seed, p.Name, p.Pos)
+				}
+				seen[i] = true
+			}
+		}
+	}
+}
+
+func TestCubeFillsTheVolume(t *testing.T) {
+	// On a 32-cube, planets reach every part of the volume: each half of
+	// each axis holds some.
+	s := DefaultSettings()
+	s.Width, s.Height, s.Depth, s.Neutrals = 32, 32, 32, 16
+	for seed := range uint64(10) {
+		var low, high [3]int
+		for _, p := range must(New(4, s, seed)).State().Planets {
+			for i, c := range [3]int{p.Pos.X, p.Pos.Y, p.Pos.Z} {
+				if c < 16 {
+					low[i]++
+				} else {
+					high[i]++
+				}
+			}
+		}
+		for i := range 3 {
+			if low[i] < 3 || high[i] < 3 {
+				t.Fatalf("seed %d axis %d: %d low, %d high", seed, i, low[i], high[i])
+			}
+		}
+	}
+}

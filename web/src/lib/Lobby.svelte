@@ -20,11 +20,12 @@
     if (store.settings) draft = { ...store.settings };
   });
 
-  // Map shapes: a flat map, a shallow volume, or a cube.
+  // Map shapes, with a ship speed and neutral count that suit each size.
   const shapes = [
-    { name: "Flat", width: 16, height: 16, depth: 1 },
-    { name: "Shallow 3D", width: 16, height: 16, depth: 4 },
-    { name: "Deep 3D", width: 10, height: 10, depth: 10 },
+    { name: "Cube 32³", width: 32, height: 32, depth: 32, shipSpeed: 4, neutrals: 16 },
+    { name: "Cube 16³", width: 16, height: 16, depth: 16, shipSpeed: 3, neutrals: 12 },
+    { name: "Shallow 3D", width: 16, height: 16, depth: 4, shipSpeed: 2, neutrals: 10 },
+    { name: "Flat", width: 16, height: 16, depth: 1, shipSpeed: 2, neutrals: 10 },
   ];
   let shape = $derived(
     shapes.find((s) => draft && s.width === draft.width && s.height === draft.height && s.depth === draft.depth)?.name ??
@@ -33,7 +34,7 @@
   function setShape(name: string) {
     const s = shapes.find((s) => s.name === name);
     if (!draft || !s) return;
-    draft = { ...draft, width: s.width, height: s.height, depth: s.depth };
+    draft = { ...draft, width: s.width, height: s.height, depth: s.depth, shipSpeed: s.shipSpeed, neutrals: s.neutrals };
     apply();
   }
 

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import * as THREE from "three";
-  import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+  import { TrackballControls } from "three/examples/jsm/controls/TrackballControls.js";
   import { CSS2DObject, CSS2DRenderer } from "three/examples/jsm/renderers/CSS2DRenderer.js";
   import type { Fleet, PlanetView } from "./proto";
   import { travelTurns } from "./proto";
@@ -38,8 +38,12 @@
     onhover,
   }: Props = $props();
 
-  // Layers sit further apart than cells so height reads clearly.
-  const layerGap = 1.5;
+  // A shallow map spreads its few layers apart so height reads clearly; a
+  // cube keeps cells cubic.
+  let layerGap = $derived(depth <= 4 ? 1.5 : 1);
+  let shallow = $derived(depth > 1 && depth <= 4);
+  // Planets, arrows and labels grow with the map so a big cube stays legible.
+  let unit = $derived(Math.max(1, Math.max(width, height, depth) / 16));
 
   let host: HTMLDivElement;
   let hover = $state<number | null>(null);
@@ -48,11 +52,12 @@
   let camera: THREE.PerspectiveCamera;
   let renderer: THREE.WebGLRenderer;
   let labels: CSS2DRenderer;
-  let controls: OrbitControls;
+  let controls: TrackballControls;
   let dynamic: THREE.Group; // rebuilt whenever the view changes
   let pickables: THREE.Mesh[] = [];
   let rings: THREE.Mesh[] = []; // selection rings turn to face the camera
   let webgl = $state(true);
+  let resetView = $state<() => void>(() => {});
 
   const sphere = new THREE.SphereGeometry(1, 24, 16);
   const floorDot = new THREE.CircleGeometry(0.12, 16).rotateX(-Math.PI / 2);
@@ -65,13 +70,18 @@
     );
   }
   const floorY = () => -((depth - 1) * layerGap) / 2 - 0.6;
-  const radius = (p: PlanetView) => 0.26 + Math.min(1, (p.ships ?? 10) / 200) * 0.12;
+  const radius = (p: PlanetView) => (0.26 + Math.min(1, (p.ships ?? 10) / 200) * 0.12) * unit;
 
+  // A label is anchored at a point and drawn in screen space, just right of
+  // it, so it stays upright and beside its planet however the map is turned.
   function label(text: string, cls: string): CSS2DObject {
-    const el = document.createElement("div");
+    const anchor = document.createElement("div");
+    anchor.className = "anchor";
+    const el = document.createElement("span");
     el.className = cls;
     el.textContent = text;
-    return new CSS2DObject(el);
+    anchor.appendChild(el);
+    return new CSS2DObject(anchor);
   }
 
   function dispose(obj: THREE.Object3D) {
@@ -84,12 +94,26 @@
     });
   }
 
-  // The static frame: floor grid and the outline of the playing volume.
+  // The static frame: the outline of the playing volume, a floor grid on
+  // flat and shallow maps, and a faint lattice of points through a cube.
   function buildFrame() {
-    const size = Math.max(width, height);
-    const grid = new THREE.GridHelper(size, size, 0x252c44, 0x1c2236);
-    grid.position.y = floorY();
-    scene.add(grid);
+    if (depth <= 4) {
+      const size = Math.max(width, height);
+      const grid = new THREE.GridHelper(size, size, 0x252c44, 0x1c2236);
+      grid.position.y = floorY();
+      scene.add(grid);
+    } else {
+      const step = Math.max(1, Math.round(Math.max(width, height, depth) / 8));
+      const pts: number[] = [];
+      for (let x = 0; x <= width; x += step)
+        for (let y = 0; y <= height; y += step)
+          for (let z = 0; z <= depth; z += step)
+            pts.push(x - width / 2, z * layerGap - ((depth - 1) * layerGap) / 2 - 0.5, y - height / 2);
+      const geo = new THREE.BufferGeometry().setAttribute("position", new THREE.Float32BufferAttribute(pts, 3));
+      scene.add(
+        new THREE.Points(geo, new THREE.PointsMaterial({ color: 0x3a4466, size: 0.12 * unit, sizeAttenuation: true })),
+      );
+    }
     const box = new THREE.BoxGeometry(width, (depth - 1) * layerGap + 1.2, height);
     const edges = new THREE.LineSegments(
       new THREE.EdgesGeometry(box),
@@ -138,20 +162,25 @@
         dynamic.add(ring);
       }
 
-      // Drop line and floor dot: where the planet sits on the map's floor.
-      const base = new THREE.Vector3(at.x, floorY(), at.z);
-      dynamic.add(
-        new THREE.Line(
-          new THREE.BufferGeometry().setFromPoints([at, base]),
-          new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.35 }),
-        ),
-      );
-      const dot = new THREE.Mesh(floorDot, new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.5 }));
-      dot.position.copy(base).y += 0.01;
-      dynamic.add(dot);
+      // On a shallow map, a drop line and floor dot show where the planet
+      // sits on the floor. In a cube the lattice gives depth instead.
+      if (shallow || depth === 1) {
+        const base = new THREE.Vector3(at.x, floorY(), at.z);
+        dynamic.add(
+          new THREE.Line(
+            new THREE.BufferGeometry().setFromPoints([at, base]),
+            new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.35 }),
+          ),
+        );
+        const dot = new THREE.Mesh(floorDot, new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.5 }));
+        dot.position.copy(base).y += 0.01;
+        dynamic.add(dot);
+      }
 
+      // Labels are screen-space, so they stay upright and readable however
+      // the cube is turned.
       const tag = label(p.ships !== undefined ? `${p.name} ${p.ships}` : p.name, p.owner === seat ? "tag mine" : "tag");
-      tag.position.copy(at).y += radius(p) + 0.25;
+      tag.position.copy(at);
       dynamic.add(tag);
     }
 
@@ -167,7 +196,7 @@
       dynamic.add(line);
       const turns = f.arrivalRound - f.launchRound + 1;
       const t = Math.min(1, Math.max(0, (round - f.launchRound) / turns));
-      const cone = new THREE.Mesh(new THREE.ConeGeometry(0.1, 0.3, 12), new THREE.MeshBasicMaterial({ color }));
+      const cone = new THREE.Mesh(new THREE.ConeGeometry(0.1 * unit, 0.3 * unit, 12), new THREE.MeshBasicMaterial({ color }));
       cone.position.lerpVectors(a, b, t);
       cone.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), b.clone().sub(a).normalize());
       dynamic.add(cone);
@@ -185,7 +214,7 @@
       dynamic.add(aim);
       const turns = travelTurns(planets[source].pos, planets[target].pos, shipSpeed);
       const tag = label(`${turns} ${turns === 1 ? "round" : "rounds"}`, "tag aim");
-      tag.position.lerpVectors(a, b, 0.5).y += 0.3;
+      tag.position.lerpVectors(a, b, 0.5);
       dynamic.add(tag);
     }
   }
@@ -232,11 +261,21 @@
 
     const span = Math.max(width, height, depth * layerGap);
     camera = new THREE.PerspectiveCamera(45, 1, 0.1, span * 10);
-    camera.position.set(0, span * 1.05, span * 1.25);
-    controls = new OrbitControls(camera, renderer.domElement);
-    controls.enableDamping = true;
+    // Free rotation: the map turns and flips like a model in the hand.
+    controls = new TrackballControls(camera, renderer.domElement);
+    controls.rotateSpeed = 3;
+    controls.zoomSpeed = 1.2;
+    controls.panSpeed = 0.6;
+    controls.dynamicDampingFactor = 0.15;
     controls.maxDistance = span * 3;
     controls.minDistance = 2;
+    resetView = () => {
+      camera.up.set(0, 1, 0);
+      camera.position.set(span * 0.7, span * 0.9, span * 1.75);
+      controls.target.set(0, 0, 0);
+      camera.lookAt(0, 0, 0);
+    };
+    resetView();
     rebuild();
 
     let down: { x: number; y: number } | null = null;
@@ -275,6 +314,7 @@
       labels.setSize(w, h);
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
+      controls.handleResize();
     };
     const ro = new ResizeObserver(resize);
     ro.observe(host);
@@ -304,6 +344,10 @@
 </script>
 
 <div class="board3d" bind:this={host} data-testid="board-3d">
+  {#if webgl}
+    <button class="reset small" onclick={() => resetView()} title="Put the camera back where it started">Reset view</button>
+    <p class="hint">Drag to turn · scroll to zoom · right-drag to pan</p>
+  {/if}
   {#if !webgl}
     <p class="muted">This browser can't show the 3D view. Switch back to the map view.</p>
   {/if}
@@ -332,7 +376,14 @@
     inset: 0;
     pointer-events: none;
   }
+  .board3d :global(.anchor) {
+    width: 0;
+    height: 0;
+  }
   .board3d :global(.tag) {
+    position: absolute;
+    left: 9px;
+    top: -14px;
     font-size: 11px;
     font-weight: 600;
     color: var(--text);
@@ -344,6 +395,21 @@
   }
   .board3d :global(.tag.aim) {
     font-weight: 400;
+  }
+  .reset {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    opacity: 0.85;
+  }
+  .hint {
+    position: absolute;
+    bottom: 6px;
+    right: 10px;
+    margin: 0;
+    font-size: 11px;
+    color: var(--muted);
+    pointer-events: none;
   }
   .sr-only {
     position: absolute;

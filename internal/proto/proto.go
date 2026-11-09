@@ -25,9 +25,15 @@ type Settings struct {
 	DisconnectGraceMs int `json:"disconnectGraceMs"`
 }
 
-// DefaultSettings returns the standard room options.
+// DefaultSettings returns the standard room options: a 32 × 32 × 32 cube
+// with planets spread through it, one per sector. Ships fly 4 cells a round
+// there, so a hop to a neighbouring sector takes about 3 rounds.
 func DefaultSettings() Settings {
-	return Settings{Settings: rules.DefaultSettings(), AIDelayMs: 1000}
+	s := rules.DefaultSettings()
+	s.Width, s.Height, s.Depth = 32, 32, 32
+	s.Neutrals = 16
+	s.ShipSpeed = 4
+	return Settings{Settings: s, AIDelayMs: 1000}
 }
 
 // Seat kinds.

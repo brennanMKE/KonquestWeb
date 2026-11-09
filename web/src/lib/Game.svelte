@@ -24,7 +24,10 @@
   let tab = $state<"log" | "fleets" | "standings">("log");
 
   // The 3D view loads three.js on first use; the choice is remembered.
-  let view3d = $state(load("parallax.view") === "3d");
+  // Deep maps open in 3D unless this browser chose the map view.
+  const chosen = load("parallax.view");
+  // svelte-ignore state_referenced_locally
+  let view3d = $state(chosen === "3d" || (chosen === "" && view.settings.depth > 1));
   function toggleView() {
     view3d = !view3d;
     save("parallax.view", view3d ? "3d" : "2d");

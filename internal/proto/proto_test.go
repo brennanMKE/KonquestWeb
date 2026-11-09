@@ -52,7 +52,7 @@ func TestEncodeShape(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Rules settings are flattened next to room settings.
-	if m.Settings["width"] != 16.0 || m.Settings["aiDelayMs"] != 1000.0 {
+	if m.Settings["width"] != 32.0 || m.Settings["depth"] != 32.0 || m.Settings["aiDelayMs"] != 1000.0 {
 		t.Errorf("settings = %v", m.Settings)
 	}
 	if _, err := Encode(struct{}{}); err == nil {

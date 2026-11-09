@@ -151,7 +151,7 @@ func TestLobby(t *testing.T) {
 	}
 	l := expect[proto.Lobby](alice)
 	if l.Host != 0 || len(l.Seats) != 2 || l.Seats[0].Name != "Alice Smith" || l.Seats[1].Name != "Player 2" ||
-		l.Phase != proto.PhaseLobby || len(l.MapPreview) != 12 {
+		l.Phase != proto.PhaseLobby || len(l.MapPreview) != 2+l.Settings.Neutrals {
 		t.Fatalf("lobby: %+v", l)
 	}
 	for _, p := range l.MapPreview {

@@ -12,9 +12,12 @@ Konquest family of games and from our own choices, never from Konquest source co
 - The map holds one home planet per player plus `neutrals` neutral planets (default 10). The total
   number of planets may be at most half the cells.
 - Each planet occupies its own cell.
-- **House rule, placement:** homes are placed one at a time; each picks, from 64 random free cells,
-  the one farthest from the homes already placed. Neutrals go on random free cells, preferring cells
-  not adjacent (including diagonally, and in 3D) to another planet.
+- **House rule, sectors:** the map is divided into near-cubic boxes called sectors, at least 1.5 per
+  planet, and every planet gets a sector of its own, on a random cell inside it (kept off the sector's
+  edges when the sector is 3 or more cells across). So planets spread through the whole map, through
+  the volume of a cube as much as across a flat map.
+- **House rule, placement:** homes are placed one at a time; each picks, from 64 random free sectors,
+  the one whose centre is farthest from the homes already placed. Neutrals take random free sectors.
 - **House rule, names:** after placement the planets are shuffled, then named A, B, C, …, Z, AA, AB, …
   in that order, so a name doesn't reveal who started where.
 - The whole map comes from the game seed, so the same seed and settings give the same map.
@@ -108,9 +111,9 @@ neutral ones, killed in combat), ships lost, planets conquered and fleets launch
 
 | Option | Default | Effect |
 |---|---|---|
-| `width`, `height`, `depth` | 16, 16, 1 | Map size |
-| `neutrals` | 10 | Neutral planets |
-| `shipSpeed` | 2 | Cells per round |
+| `width`, `height`, `depth` | 32, 32, 32 | Map size (the engine's own default is 16 × 16 × 1) |
+| `neutrals` | 16 | Neutral planets (engine default 10) |
+| `shipSpeed` | 4 | Cells per round (engine default 2) |
 | `blindMap` | off | Hide other planets' stats |
 | `neutralStats` | on | Show neutral stats (when not blind) |
 | `captureProducesImmediately` | off | A captured planet produces in the round it's captured |

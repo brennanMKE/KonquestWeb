@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, untrack } from "svelte";
   import * as THREE from "three";
   import { TrackballControls } from "three/examples/jsm/controls/TrackballControls.js";
   import { CSS2DObject, CSS2DRenderer } from "three/examples/jsm/renderers/CSS2DRenderer.js";
@@ -165,9 +165,9 @@
     // The order bar's planet counts as hovered, so the aim line follows it.
     const hovered = focus ?? hover;
 
-    for (const p of planets) {
+    for (const p of shown) {
       const at = toWorld(p);
-      const color = new THREE.Color(ownerHex(shownOwner.get(p.id) ?? p.owner));
+      const color = new THREE.Color(ownerHex(p.owner));
       const selected = p.id === source || p.id === dest;
       const mesh = new THREE.Mesh(
         sphere,
@@ -232,7 +232,7 @@
     // each empire reads as a coloured cloud with pockets where it has pushed
     // into another's space.
     const byOwner = new Map<number, ReturnType<typeof territory>>();
-    for (const b of territory(planets, width, height, depth)) {
+    for (const b of territory(shown, width, height, depth)) {
       if (!byOwner.has(b.owner)) byOwner.set(b.owner, []);
       byOwner.get(b.owner)!.push(b);
     }
@@ -259,7 +259,7 @@
       dynamic.add(mesh);
     }
 
-    for (const f of fleets) {
+    for (const f of shownFleets) {
       const a = toWorld(planets[f.from]);
       const b = toWorld(planets[f.to]);
       const color = new THREE.Color(ownerHex(f.owner));
@@ -296,7 +296,7 @@
 
   // Rebuild whenever anything shown changes.
   $effect(() => {
-    void [planets, fleets, round, source, dest, hover, focus, seat, shownOwner];
+    void [shown, shownFleets, round, source, dest, hover, focus, seat];
     rebuild();
   });
 
@@ -417,6 +417,38 @@
 
   // While a battle plays, a planet shows its owner from before it.
   let shownOwner = $state(new Map<number, number>());
+
+  // Suspense: the planets and fleets arrive already updated with the round's
+  // results. Until a round's battles have played, the board shows it as it
+  // stood before (owners, names, ship counts, territory, the fleets on their
+  // way), and each planet changes only as its own battle ends.
+  type Queued = { round: number; events: GameEvent[]; src: unknown; after: PlanetView[]; afterFleets: Fleet[] };
+  let settled = $state<PlanetView[]>(untrack(() => planets));
+  let settledFleets = $state<Fleet[]>(untrack(() => fleets));
+  let playingNow = $state<Queued | null>(null);
+  let revealed = $state(new Set<number>());
+  let finished = $state<unknown>(null);
+  let holding = $derived(replay != null && replay !== finished);
+  $effect(() => {
+    if (holding) return;
+    settled = planets;
+    settledFleets = fleets;
+  });
+  let shown = $derived.by(() => {
+    if (!holding) return planets;
+    const after = playingNow?.after;
+    return settled.map((p) => {
+      const q = after && revealed.has(p.id) ? after[p.id] : p;
+      const owner = shownOwner.get(p.id);
+      return owner === undefined || owner === q.owner ? q : { ...q, owner };
+    });
+  });
+  // Fleets launched since (in a game, by whoever moves next) show at once.
+  let shownFleets = $derived.by(() => {
+    if (!holding) return fleets;
+    const known = new Set(settledFleets.map((f) => f.id));
+    return [...settledFleets, ...fleets.filter((f) => !known.has(f.id) && f.launchRound >= round)];
+  });
   let replayed: unknown = null;
   let replaying = $state(false);
   let skip = false;
@@ -428,7 +460,7 @@
 
   // Rounds replay one at a time, in order. If a newer round is waiting, the
   // one playing hurries to its end so the view keeps up with the game.
-  let queue: { round: number; events: GameEvent[] }[] = [];
+  let queue: Queued[] = [];
   /** The last round fully replayed (shown as data-replayed, for tests). */
   let doneRound = $state(0);
   // The scene is set up asynchronously; a round that arrived before it was
@@ -440,7 +472,7 @@
     if (replay && replay !== replayed && ready) {
       replayed = replay;
       noteInput();
-      queue.push(replay);
+      queue.push({ ...replay, src: replay, after: planets, afterFleets: fleets });
       if (replaying) skip = true;
       else drain();
     }
@@ -456,7 +488,15 @@
     for (;;) {
       while (queue.length) {
         const r = queue.shift()!;
+        playingNow = r;
+        revealed = new Set();
         moved = (await runReplay(r.events)) || moved;
+        // The round is over: the board moves on to how it ended.
+        settled = r.after;
+        settledFleets = r.afterFleets;
+        playingNow = null;
+        revealed = new Set();
+        finished = r.src;
         doneRound = r.round;
         onreplaydone?.(r.round);
       }
@@ -498,9 +538,10 @@
     // them in place, in the order they happened.
     // Scenery keeps turning instead.
     if (autoCamera && !ambient) await frameAll([...new Set(battles.map((e) => e.planet))]);
+    const lastBattle = new Map(battles.map((e) => [e.planet, e]));
     for (const e of battles) {
       if (skip) break;
-      await battle(e);
+      await battle(e, lastBattle.get(e.planet) === e);
     }
     shownOwner = new Map();
     for (const a of anims) a(Infinity);
@@ -516,7 +557,7 @@
 
   // One battle: the attackers converge on the planet, the exchanges flash,
   // then the planet changes hands (or rings, if it held).
-  async function battle(e: GameEvent) {
+  async function battle(e: GameEvent, last: boolean) {
     const at = toWorld(planets[e.planet]);
     // The planet shows whoever held it when this fleet arrived.
     shownOwner = new Map(shownOwner).set(e.planet, e.defender);
@@ -553,6 +594,14 @@
 
     // Outcome.
     if (e.kind === "captured") shownOwner = new Map(shownOwner).set(e.planet, e.attacker);
+    // Its last battle of the round: the planet shows how the round left it
+    // (owner, name, ships), and the space around it follows.
+    if (last) {
+      revealed = new Set(revealed).add(e.planet);
+      const m = new Map(shownOwner);
+      m.delete(e.planet);
+      shownOwner = m;
+    }
     ring(at, new THREE.Color(ownerHex(e.kind === "captured" ? e.attacker : e.defender)));
     const s = soundFor(e, seat);
     if (s) sfx(s);
@@ -836,7 +885,7 @@
   {#if !ambient}
     <!-- Planets as buttons for keyboard and screen-reader users. -->
     <ul class="sr-only" aria-label="Planets">
-      {#each planets as p (p.id)}
+      {#each shown as p (p.id)}
         <li><button class:mine={p.owner === seat} aria-label="Planet {p.name}" onclick={() => onpick?.(p.id)}></button></li>
       {/each}
     </ul>

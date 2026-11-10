@@ -204,3 +204,38 @@ test("fast autoplay in 3D never waits out the fallback", async ({ page }) => {
   const gaps = times.slice(1).map((t, i) => t - times[i]);
   expect(Math.max(...gaps)).toBeLessThan(20_000);
 });
+
+// Suspense: as a round's battles start, the board still shows the round
+// before it (planet names, owners, ship counts); it changes as battles end.
+test("3D battles keep the board as it was until they end", async ({ page }) => {
+  test.setTimeout(150_000);
+  await page.goto("/");
+  await page.evaluate(() => {
+    localStorage.setItem("parallax.view", "3d");
+    localStorage.setItem("parallax.replays", "on");
+  });
+  await page.goto("/");
+  await page
+    .locator("label", { hasText: "Watch saved games" })
+    .locator("input")
+    .setInputFiles(new URL("./fixtures/battles-3d.json", import.meta.url).pathname);
+  const board = page.getByTestId("board-3d");
+  await expect(board).toBeVisible();
+  const tags = () =>
+    page.locator(".board3d .labels .tag:not(.aim)").evaluateAll((els) => els.map((e) => e.textContent).sort().join("|"));
+  let changed = 0;
+  for (let round = 1; round <= 10 && changed < 2; round++) {
+    await expect(board).toHaveAttribute("data-battles", "idle", { timeout: 30_000 });
+    const before = await tags();
+    await page.keyboard.press("ArrowRight");
+    try {
+      await expect(board).toHaveAttribute("data-battles", "playing", { timeout: 2_000 });
+    } catch {
+      continue; // no battles this round
+    }
+    expect(await tags()).toBe(before);
+    await expect(board).toHaveAttribute("data-battles", "idle", { timeout: 30_000 });
+    if ((await tags()) !== before) changed++;
+  }
+  expect(changed).toBeGreaterThan(0);
+});

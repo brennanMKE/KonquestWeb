@@ -272,8 +272,26 @@ class Store {
       if (this.fatal) return;
       // Back off up to 10 s between reconnect attempts.
       const delay = Math.min(10000, 500 * 2 ** this.retry++);
-      setTimeout(() => this.connect(), delay);
+      setTimeout(() => this.reconnect(), delay);
     };
+  }
+
+  /**
+   * Connects again unless the room is gone: rooms live in the server's
+   * memory, so a restart or 10 idle minutes ends them.
+   */
+  private async reconnect() {
+    try {
+      const res = await fetch(`/api/rooms/${encodeURIComponent(this.room)}`);
+      if (res.status === 404) {
+        this.fatal = `Room ${this.room} has ended. Rooms close when the server restarts or after 10 minutes with nobody in them.`;
+        save(tokenKey(this.room), null);
+        return;
+      }
+    } catch {
+      // The server is unreachable; keep trying.
+    }
+    this.connect();
   }
 
   send(msg: ClientMsg) {

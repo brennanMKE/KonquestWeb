@@ -386,7 +386,7 @@
     onhover?.(id);
   }
 
-  // --- Battle replays -----------------------------------------------------
+  // --- Battles -----------------------------------------------------------
 
   // While a battle plays, a planet shows its owner from before it.
   let shownOwner = $state(new Map<number, number>());
@@ -757,7 +757,7 @@
   });
 </script>
 
-<div class="board3d" bind:this={host} data-testid="board-3d" data-replayed={doneRound}>
+<div class="board3d" bind:this={host} data-testid="board-3d" data-replayed={doneRound} data-battles={replaying ? "playing" : "idle"}>
   {#if webgl}
     <div class="views" role="toolbar" aria-label="Camera">
       {#each Object.keys(presets) as name (name)}
@@ -783,9 +783,6 @@
         Auto camera {autoCamera ? "on" : "off"}
       </button>
     </div>
-    {#if replaying}
-      <p class="replaying">Replaying battles · click or Esc to skip</p>
-    {/if}
     <p class="hint">Drag to turn · scroll to zoom · right-drag to pan</p>
   {/if}
   {#if !webgl}
@@ -854,18 +851,6 @@
     gap: 4px;
     max-width: 70%;
     opacity: 0.9;
-  }
-  .replaying {
-    position: absolute;
-    bottom: 28px;
-    left: 50%;
-    transform: translateX(-50%);
-    margin: 0;
-    padding: 4px 10px;
-    border-radius: 6px;
-    background: rgb(19 24 40 / 0.85);
-    font-size: 13px;
-    pointer-events: none;
   }
   .hint {
     position: absolute;

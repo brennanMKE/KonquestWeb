@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-test("the final scores wait for the last round's battle replay", async ({ page }) => {
+test("the final scores wait for the last round's battles", async ({ page }) => {
   await page.goto("/");
   await page.getByLabel("Your name").fill("Host");
   await page.getByRole("button", { name: "Create game" }).click();
@@ -17,20 +17,20 @@ test("the final scores wait for the last round's battle replay", async ({ page }
   await set("Max rounds (0 = none)", "12");
   await page.getByRole("button", { name: "Start game" }).click();
 
-  // Until the scores appear, never show them over a running replay.
+  // Until the scores appear, never show them over battles still playing.
   const scores = page.getByRole("button", { name: "Back to the map" });
-  const replaying = page.getByText("Replaying battles");
+  const board = page.getByTestId("board-3d");
   // Leave 30 s of the test timeout for the checks below.
   const deadline = Date.now() + test.info().timeout - 30_000;
   while (!(await scores.isVisible())) {
     expect(Date.now()).toBeLessThan(deadline);
     await page.waitForTimeout(100);
   }
-  await expect(replaying).toHaveCount(0);
+  await expect(board).toHaveAttribute("data-battles", "idle");
   // Each row says which kind of computer played it.
   await expect(page.locator(".over td.type")).toHaveCount(3);
   await expect(page.locator(".over td.type").first()).not.toHaveText("");
-  // The board had finished replaying the final round itself, not just an
+  // The board had finished the final round's battles itself, not just an
   // earlier one.
   const finalRound = Number((await page.getByText(/^Round \d+/).first().innerText()).match(/\d+/)![0]);
   await expect(page.getByTestId("board-3d")).toHaveAttribute("data-replayed", String(finalRound));

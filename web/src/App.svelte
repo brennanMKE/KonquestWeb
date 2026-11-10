@@ -13,7 +13,7 @@
   if (replayRoom) store.watchReplay(replayRoom).then((ok) => (replayFailed = !ok));
 
   function closeReplay() {
-    if (store.joined) store.replay = null;
+    if (store.joined) store.closeReplays();
     else location.href = "/";
   }
   let room = $state(startRoom);

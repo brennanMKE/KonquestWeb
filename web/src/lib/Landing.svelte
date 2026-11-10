@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { load, nameKey, save, store } from "./store.svelte";
+  import { load, nameKey, replayFiles, save, store } from "./store.svelte";
 
   interface Props {
     room?: string;
@@ -52,21 +52,15 @@
     }
   }
 
-  async function watchFile(e: Event) {
-    const file = (e.currentTarget as HTMLInputElement).files?.[0];
-    if (!file) return;
+  async function watchFiles(e: Event) {
+    const files = [...((e.currentTarget as HTMLInputElement).files ?? [])];
+    if (!files.length) return;
     busy = true;
     error = "";
-    try {
-      const res = await fetch("/api/replay", { method: "POST", body: await file.text() });
-      const body = await res.json();
-      if (!res.ok) throw new Error(body.error ?? `server said ${res.status}`);
-      store.openReplay(body);
-    } catch (e) {
-      error = `Couldn't play that game back: ${(e as Error).message}`;
-    } finally {
-      busy = false;
-    }
+    const { games, errors } = await replayFiles(files);
+    busy = false;
+    if (errors.length) error = `Couldn't play back ${errors.join("; ")}`;
+    if (games.length) store.openReplays(games);
   }
 
   async function join(e: SubmitEvent) {
@@ -116,8 +110,8 @@
       <span>Load a saved game…</span>
     </label>
     <label class="load">
-      <input type="file" accept=".json,application/json" onchange={watchFile} disabled={busy} />
-      <span>Watch a saved game…</span>
+      <input type="file" accept=".json,application/json" multiple onchange={watchFiles} disabled={busy} />
+      <span>Watch saved games…</span>
     </label>
   {/if}
 

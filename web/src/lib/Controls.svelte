@@ -86,7 +86,7 @@
       </div>
     {:else if store.watching}
       <p>You're watching. {activeName} is moving.</p>
-      <p class="hint">Drag to turn the map. Each round's battles replay in 3D.</p>
+      <p class="hint">Drag to turn the map. Each round's battles play out in 3D.</p>
     {:else if !alive}
       <p class="muted">You've been eliminated. You can keep watching.</p>
     {:else if !store.myTurn}

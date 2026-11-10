@@ -14,6 +14,37 @@ export interface LogEntry {
   tone: "good" | "bad" | "info";
 }
 
+/** A replay with where to get its game file. */
+export interface LoadedReplay extends Replay {
+  /** The file's name, for the list of games. */
+  name?: string;
+  /** The game file itself, when it came from one. */
+  file?: string;
+  /** Where to download the game file, when it came from a room. */
+  download?: string;
+}
+
+/** Plays game files back; returns the games and any files that failed. */
+export async function replayFiles(files: File[]): Promise<{ games: LoadedReplay[]; errors: string[] }> {
+  const results = await Promise.all(
+    files.map(async (f) => {
+      try {
+        const text = await f.text();
+        const res = await fetch("/api/replay", { method: "POST", body: text });
+        const body = await res.json();
+        if (!res.ok) throw new Error(body.error ?? `server said ${res.status}`);
+        return { game: { ...(body as Replay), name: f.name, file: text } as LoadedReplay };
+      } catch (e) {
+        return { error: `${f.name}: ${(e as Error).message}` };
+      }
+    }),
+  );
+  return {
+    games: results.flatMap((r) => (r.game ? [r.game] : [])),
+    errors: results.flatMap((r) => (r.error ? [r.error] : [])),
+  };
+}
+
 const tokenKey = (room: string) => `parallax.token.${room}`;
 export const nameKey = "parallax.name";
 
@@ -73,7 +104,7 @@ class Store {
   /** The events of the last resolved round, for the board to replay. */
   lastEvents = $state<{ round: number; events: GameEvent[] } | null>(null);
   /** Set while the 3D board replays battles; it plays their sounds then. */
-  replays = false;
+  playsBattles = false;
   /**
    * True from a round's result until the board has replayed its battles.
    * The game-over screen and sound wait for it, so the final battle plays
@@ -99,21 +130,54 @@ class Store {
     f?.();
   }
 
-  /** A whole game being watched back, over everything else. */
-  replay = $state<Replay | null>(null);
+  /**
+   * Saved games being watched back, over everything else: one from a
+   * finished room, or several uploaded files played in turn.
+   */
+  replays = $state<LoadedReplay[]>([]);
+  replayIndex = $state(0);
+
+  /** The game being watched back, or null. */
+  get replay(): LoadedReplay | null {
+    return this.replays[this.replayIndex] ?? null;
+  }
 
   /**
-   * Opens a replay. Outside a room it also takes the replay's room and
-   * seats, so players and planets get the names they had in the game.
+   * Adds games to watch. Outside a room each game names its players and
+   * planets from its own room code, as its players saw them.
    */
-  openReplay(r: Replay) {
+  openReplays(list: LoadedReplay[], append = false) {
+    const named = list.map((r) => {
+      const room = this.joined ? this.room : r.room || "REPLAY";
+      const frames = r.frames.map((f) => ({
+        ...f,
+        view: { ...f.view, planets: f.view.planets.map((p) => ({ ...p, letter: p.letter ?? p.name, name: planetName(room, p.id, p.owner) })) },
+      }));
+      return { ...r, frames };
+    });
+    if (append && this.replays.length) {
+      this.replays = [...this.replays, ...named];
+    } else {
+      this.replays = named;
+      this.selectReplay(0);
+    }
+  }
+
+  /** Shows the i-th game of the list. */
+  selectReplay(i: number) {
+    const n = this.replays.length;
+    if (!n) return;
+    this.replayIndex = ((i % n) + n) % n;
+    const r = this.replays[this.replayIndex];
     if (!this.joined) {
       this.room = r.room || "REPLAY";
       this.seats = r.seats.map((s, seat) => ({ ...s, seat, connected: true }));
     }
-    // Planets are named by their holder, as in the game.
-    const frames = r.frames.map((f) => ({ ...f, view: this.named(f.view) }));
-    this.replay = { ...r, frames };
+  }
+
+  closeReplays() {
+    this.replays = [];
+    this.replayIndex = 0;
   }
 
   /** Fetches and opens a finished room's replay; reports failure. */
@@ -122,7 +186,7 @@ class Store {
       const res = await fetch(`/api/rooms/${encodeURIComponent(room)}/replay`);
       const body = await res.json();
       if (!res.ok) throw new Error(body.error ?? `server said ${res.status}`);
-      this.openReplay(body as Replay);
+      this.openReplays([{ ...(body as Replay), download: `/api/rooms/${encodeURIComponent(room)}/save` }]);
       return true;
     } catch (e) {
       this.showToast(`Couldn't load the replay: ${(e as Error).message}`);
@@ -302,9 +366,9 @@ class Store {
         this.view = this.named(m.view);
         for (const e of m.events) this.addEvent(e);
         // A replaying board plays each battle's sound as its battle ends.
-        if (!this.replays) play(...m.events.map((e) => soundFor(e, this.seat)).filter((s): s is Sound => s !== null));
+        if (!this.playsBattles) play(...m.events.map((e) => soundFor(e, this.seat)).filter((s): s is Sound => s !== null));
         this.lastEvents = { round: m.round, events: m.events };
-        if (this.replays) {
+        if (this.playsBattles) {
           this.replayPending = true;
           this.pendingRound = m.round;
           // Never wait forever, say if the 3D view failed to load.

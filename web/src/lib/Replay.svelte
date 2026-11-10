@@ -1,6 +1,7 @@
 <script lang="ts">
-  // Watching a whole game back, round by round, with nothing hidden.
-  import { load, save, store } from "./store.svelte";
+  // Watching saved games back, round by round, with nothing hidden. Several
+  // games can play in turn, on a loop, filling the page to leave up.
+  import { load, replayFiles, save, store } from "./store.svelte";
   import { unlockAudio } from "./audio";
   import { ownerColor } from "./colors";
   import { SPECTATOR, playerType, type GameEvent } from "./proto";
@@ -13,13 +14,16 @@
   let frames = $derived(replay.frames);
   let last = $derived(frames.length - 1);
   let settings = $derived(replay.settings);
+  let games = $derived(store.replays.length);
 
   let index = $state(0);
-  let frame = $derived(frames[index]);
+  let frame = $derived(frames[Math.min(index, last)]);
   let playing = $state(false);
   const speeds = [0.5, 1, 2, 4];
   let speed = $state(Number(load("parallax.replaySpeed")) || 1);
   $effect(() => save("parallax.replaySpeed", String(speed)));
+  // svelte-ignore state_referenced_locally
+  let loop = $state(games > 1);
 
   const chosen = load("parallax.view");
   // svelte-ignore state_referenced_locally
@@ -30,7 +34,7 @@
   }
   let board3d = $derived(view3d ? import("./Board3D.svelte") : null);
 
-  // Battle animations, shared with the game's Replays setting.
+  // Battles play out in 3D, as in the game; the setting is shared with it.
   let animateBattles = $state(load("parallax.replays") !== "off");
   function toggleBattles() {
     animateBattles = !animateBattles;
@@ -38,8 +42,8 @@
     if (!animateBattles) show(index);
   }
 
-  // Battles animate in 3D when stepping forward one round at a time. While
-  // they play, autoplay waits for them.
+  // Battles play when stepping forward one round at a time. While they
+  // play, autoplay waits for them.
   let battles = $state<{ round: number; events: GameEvent[] } | null>(null);
   let animating = $state(false);
   let fallback = 0;
@@ -57,13 +61,22 @@
       animating = false;
     }
   }
-  function replayDone(round: number) {
+  function battlesDone(round: number) {
     if (battles && round === battles.round) {
       clearTimeout(fallback);
       animating = false;
     }
   }
   $effect(() => () => clearTimeout(fallback));
+
+  // Another game starts from its beginning.
+  let current: unknown = null;
+  $effect(() => {
+    if (replay !== current) {
+      current = replay;
+      show(0);
+    }
+  });
 
   function togglePlay() {
     unlockAudio();
@@ -75,14 +88,24 @@
     playing = true;
   }
 
-  // Autoplay: the next round after a pause, once any battles have played.
+  // Autoplay: the next round after a pause, once its battles have played.
+  // At the end of a game the result stays up a while, then a loop moves on
+  // to the next game, or starts this one again.
+  const endPauseMs = 8000;
   $effect(() => {
     if (!playing || animating) return;
-    if (index >= last) {
+    if (index < last) {
+      const t = setTimeout(() => show(index + 1, true), 1200 / speed);
+      return () => clearTimeout(t);
+    }
+    if (!loop) {
       playing = false;
       return;
     }
-    const t = setTimeout(() => show(index + 1, true), 1200 / speed);
+    const t = setTimeout(() => {
+      if (games > 1) store.selectReplay(store.replayIndex + 1);
+      else show(0);
+    }, endPauseMs);
     return () => clearTimeout(t);
   });
 
@@ -91,8 +114,23 @@
     show(index + d, d === 1);
   }
 
+  function pickGame(i: number) {
+    store.selectReplay(i);
+  }
+
+  // Full page: only the board, with a caption, to leave up and watch.
+  let fullPage = $state(false);
+  let fullHint = $state(false);
+  function enterFullPage() {
+    fullPage = true;
+    fullHint = true;
+    setTimeout(() => (fullHint = false), 3000);
+    if (!playing) togglePlay();
+  }
+
   function onkey(e: KeyboardEvent) {
-    if ((e.target as HTMLElement)?.tagName === "INPUT" || (e.target as HTMLElement)?.tagName === "SELECT") return;
+    const tag = (e.target as HTMLElement)?.tagName;
+    if (tag === "INPUT" || tag === "SELECT") return;
     if (e.key === "ArrowRight") step(1);
     else if (e.key === "ArrowLeft") step(-1);
     else if (e.key === " ") {
@@ -104,46 +142,79 @@
     } else if (e.key === "End") {
       playing = false;
       show(last);
-    } else return;
+    } else if (e.key === "Escape" && fullPage && !animating) fullPage = false;
   }
 
-  // The log of the shown round: fleets sent, then what happened.
+  // Download the game file: the uploaded file, or the room's.
+  let fileUrl = $derived(replay.file ? URL.createObjectURL(new Blob([replay.file], { type: "application/json" })) : "");
+  $effect(() => {
+    const u = fileUrl;
+    return () => {
+      if (u) URL.revokeObjectURL(u);
+    };
+  });
+  let downloadHref = $derived(fileUrl || replay.download || "");
+  let downloadName = $derived(replay.name ?? `parallax-${replay.room || "game"}.json`);
+
+  let adding = $state(false);
+  async function addGames(e: Event) {
+    const input = e.currentTarget as HTMLInputElement;
+    const files = [...(input.files ?? [])];
+    input.value = "";
+    if (!files.length) return;
+    adding = true;
+    const { games: added, errors } = await replayFiles(files);
+    adding = false;
+    if (errors.length) store.showToast(`Couldn't play back ${errors.join("; ")}`);
+    if (added.length) {
+      store.openReplays(added, true);
+      loop = true;
+    }
+  }
+
+  // What happened in the shown round: fleets sent, then the battles.
   let lines = $derived.by(() => {
-    const out: { text: string; tone: string; color?: string }[] = [];
+    const out: { text: string; big: boolean; color?: string }[] = [];
     const v = frame.view;
     const name = (id: number) => v.planets[id]?.name ?? "?";
     for (const f of frame.launched) {
       out.push({
         text: `${store.playerName(f.owner)} sent ${f.ships} ships from ${name(f.from)} to ${name(f.to)}${f.arrivalRound > frame.round ? `, arriving in round ${f.arrivalRound}` : ""}.`,
-        tone: "info",
+        big: false,
         color: ownerColor(f.owner),
       });
     }
     for (const e of frame.events) {
       const d = store.describe(e, SPECTATOR);
-      if (d) out.push({ text: d.text, tone: e.kind === "captured" || e.kind === "eliminated" || e.kind === "game_over" ? "big" : "info", color: e.attacker >= 0 ? ownerColor(e.attacker) : undefined });
+      if (d) {
+        out.push({
+          text: d.text,
+          big: e.kind === "captured" || e.kind === "eliminated" || e.kind === "game_over",
+          color: e.attacker >= 0 ? ownerColor(e.attacker) : undefined,
+        });
+      }
     }
     return out;
   });
 
   let winnerName = $derived(replay.winner >= 0 ? store.playerName(replay.winner) : "");
+  let result = $derived(replay.over ? (winnerName ? `${winnerName} wins` : "No winner") : "Saved before the end");
   let seats = $derived(replay.seats.map((s, seat) => ({ ...s, seat, connected: true })));
+  let gameLabel = (r: { name?: string; room: string }, i: number) => r.name?.replace(/\.json$/i, "") || (r.room ? `Room ${r.room}` : `Game ${i + 1}`);
 </script>
 
 <svelte:window onkeydown={onkey} onpointerdown={unlockAudio} />
 
-<div class="replay">
+<div class="replay" class:full={fullPage}>
   <header>
     <strong>Parallax</strong>
-    <span class="muted">Replay{replay.room ? ` of room ${replay.room}` : ""}</span>
+    <span class="muted">Replay{replay.room ? ` of room ${replay.room}` : ""}{games > 1 ? ` · game ${store.replayIndex + 1} of ${games}` : ""}</span>
     <span>
       {#if index === 0}Start{:else}Round {frame.round}{/if}
       <span class="muted">of {frames[last].round}</span>
     </span>
-    {#if replay.over && index === last}
-      <span class="result">{winnerName ? `${winnerName} wins` : "No winner"}</span>
-    {:else if !replay.over}
-      <span class="muted">Saved before the end</span>
+    {#if index === last || !replay.over}
+      <span class="result" class:muted={!replay.over}>{result}</span>
     {/if}
     <span class="spacer"></span>
     {#each seats as s (s.seat)}
@@ -151,6 +222,9 @@
         <span class="dot" style:background={ownerColor(s.seat)}></span>{store.playerName(s.seat)}
       </span>
     {/each}
+    {#if downloadHref}
+      <a class="download" href={downloadHref} download={downloadName}>Download game</a>
+    {/if}
     <button class="small" onclick={onclose}>Close replay</button>
   </header>
 
@@ -167,30 +241,57 @@
           fleets={frame.view.fleets}
           round={frame.view.round}
           replay={battles}
-          onreplaydone={replayDone}
+          onreplaydone={battlesDone}
         />
       {/snippet}
-      {#if board3d}
-        {#await board3d}
-          <p class="muted">Loading the 3D view…</p>
-        {:then mod}
-          {@render boardProps(mod.default)}
-        {:catch}
-          <p class="error">Couldn't load the 3D view.</p>
-        {/await}
-      {:else}
-        {@render boardProps(Board)}
-      {/if}
+      <!-- Each game gets a fresh board: maps differ in size and shape. -->
+      {#key replay}
+        {#if board3d}
+          {#await board3d}
+            <p class="muted">Loading the 3D view…</p>
+          {:then mod}
+            {@render boardProps(mod.default)}
+          {:catch}
+            <p class="error">Couldn't load the 3D view.</p>
+          {/await}
+        {:else}
+          {@render boardProps(Board)}
+        {/if}
+      {/key}
       <div class="view-toggle">
         <button class="small" onclick={toggleView} title="Switch between the map and a 3D view you can turn">
           {view3d ? "Map view" : "3D view"}
         </button>
         {#if view3d}
-          <button class="small" onclick={toggleBattles} aria-pressed={animateBattles} title="Play each round's battles in 3D">
+          <button class="small" onclick={toggleBattles} aria-pressed={animateBattles} title="Play out each round's battles in 3D">
             Battles {animateBattles ? "on" : "off"}
           </button>
         {/if}
+        {#if fullPage}
+          <button class="small" onclick={togglePlay}>{playing ? "Pause" : "Play"}</button>
+          <button class="small" onclick={() => (fullPage = false)}>Exit full page</button>
+        {:else}
+          <button class="small" onclick={enterFullPage} title="Show only the map and play, ready for full screen. Esc to return.">Fill page</button>
+        {/if}
       </div>
+      {#if fullPage}
+        <div class="caption" aria-live="polite">
+          <div>
+            {#if games > 1}<span class="muted">Game {store.replayIndex + 1} of {games} · </span>{/if}
+            {#if index === 0}Start{:else}Round {frame.round} of {frames[last].round}{/if}
+          </div>
+          {#if index === last}<div class="big">{result}</div>{/if}
+          <div class="names">
+            {#each seats as s (s.seat)}
+              <span class="player" class:out={!frame.view.players[s.seat]?.alive}>
+                <span class="dot" style:background={ownerColor(s.seat)}></span>{store.playerName(s.seat)}
+                <span class="muted">{frame.standings.find((x) => x.seat === s.seat)?.planets ?? 0}</span>
+              </span>
+            {/each}
+          </div>
+        </div>
+        {#if fullHint}<div class="full-hint">Press Esc to return</div>{/if}
+      {/if}
     </div>
 
     <aside>
@@ -213,13 +314,34 @@
           }}
           aria-label="Round"
         />
-        <label class="speed">
-          Speed
-          <select bind:value={speed}>
-            {#each speeds as s (s)}<option value={s}>{s}×</option>{/each}
-          </select>
+        <div class="options">
+          <label>
+            Speed
+            <select bind:value={speed}>
+              {#each speeds as s (s)}<option value={s}>{s}×</option>{/each}
+            </select>
+          </label>
+          <label><input type="checkbox" bind:checked={loop} /> Loop</label>
+        </div>
+        {#if view3d && animateBattles}<p class="hint">Battles play out in 3D when you step forward or play. Click or Esc skips them.</p>{/if}
+      </section>
+
+      <section class="games" aria-label="Games">
+        {#if games > 1}
+          <ol>
+            {#each store.replays as r, i (r)}
+              <li>
+                <button class:on={i === store.replayIndex} onclick={() => pickGame(i)}>
+                  {gameLabel(r, i)} <span class="muted">· {r.frames[r.frames.length - 1].round} rounds</span>
+                </button>
+              </li>
+            {/each}
+          </ol>
+        {/if}
+        <label class="add">
+          <input type="file" accept=".json,application/json" multiple onchange={addGames} disabled={adding} />
+          <span>{adding ? "Adding…" : "Add saved games…"}</span>
         </label>
-        {#if view3d && animateBattles}<p class="hint">Battles play in 3D when you step forward or play. Click or Esc skips them.</p>{/if}
       </section>
 
       <section class="standings">
@@ -229,7 +351,7 @@
       <section class="log" aria-label="What happened">
         <h3>{index === 0 ? "The start" : `Round ${frame.round}`}</h3>
         {#each lines as l, i (i)}
-          <p class:big={l.tone === "big"}>
+          <p class:big={l.big}>
             {#if l.color}<span class="dot" style:background={l.color}></span>{/if}{l.text}
           </p>
         {:else}
@@ -261,6 +383,14 @@
   .result {
     color: var(--accent);
     font-weight: 700;
+  }
+  .result.muted {
+    color: var(--muted);
+    font-weight: 400;
+  }
+  .download {
+    color: var(--accent);
+    font-size: 13px;
   }
   .player {
     display: flex;
@@ -336,17 +466,58 @@
     width: 100%;
     margin: 10px 0 6px;
   }
-  .speed {
+  .options {
     display: flex;
+    gap: 16px;
     align-items: center;
-    gap: 8px;
     font-size: 13px;
     color: var(--muted);
+  }
+  .options label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
   }
   .hint {
     font-size: 12px;
     color: var(--muted);
     margin: 8px 0 0;
+  }
+  .games ol {
+    list-style: none;
+    margin: 0 0 8px;
+    padding: 0;
+    max-height: 160px;
+    overflow-y: auto;
+  }
+  .games li button {
+    width: 100%;
+    text-align: left;
+    padding: 3px 8px;
+    font-size: 13px;
+    border-color: transparent;
+    background: none;
+  }
+  .games li button.on {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .add {
+    position: relative;
+    display: inline-block;
+    font-size: 13px;
+    color: var(--accent);
+    cursor: pointer;
+  }
+  .add input {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+  }
+  .add:focus-within span {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
   }
   .log {
     flex: 1;
@@ -364,5 +535,59 @@
   }
   .log p.big {
     font-weight: 600;
+  }
+  /* Full page: the board edge to edge, with a caption. */
+  .replay.full header,
+  .replay.full aside {
+    display: none;
+  }
+  .replay.full .board-wrap {
+    padding: 0;
+  }
+  .replay.full .view-toggle {
+    top: 8px;
+    left: 8px;
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+  .replay.full .board-wrap:hover .view-toggle,
+  .replay.full .view-toggle:focus-within {
+    opacity: 0.85;
+  }
+  .caption {
+    position: absolute;
+    z-index: 1;
+    left: 16px;
+    bottom: 16px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    background: rgb(0 0 0 / 0.55);
+    font-size: 14px;
+    pointer-events: none;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .caption .big {
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--accent);
+  }
+  .caption .names {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+  }
+  .full-hint {
+    position: absolute;
+    z-index: 2;
+    top: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgb(0 0 0 / 0.6);
+    padding: 6px 14px;
+    border-radius: 6px;
+    font-size: 14px;
+    pointer-events: none;
   }
 </style>

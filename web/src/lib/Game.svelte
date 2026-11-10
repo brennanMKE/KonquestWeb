@@ -27,16 +27,16 @@
   }
   let board3d = $derived(view3d ? import("./Board3D.svelte") : null);
 
-  // Battle replays in the 3D view, on unless turned off.
+  // Battles play out in the 3D view as each round ends, unless turned off.
   let replays = $state(load("parallax.replays") !== "off");
   function toggleReplays() {
     replays = !replays;
     save("parallax.replays", replays ? "on" : "off");
   }
   $effect(() => {
-    store.replays = view3d && replays;
+    store.playsBattles = view3d && replays;
     // Leaving the 3D view (or turning replays off) ends any wait for one.
-    if (!store.replays && store.replayPending) store.replayDone();
+    if (!store.playsBattles && store.replayPending) store.replayDone();
   });
 
   // Full page: the board alone fills the window, ready for the system's full
@@ -80,7 +80,7 @@
     setSound(sound);
   }
 
-  // Keyboard: planet letters pick planets. Esc skips a battle replay (the 3D
+  // Keyboard: planet letters pick planets. Esc skips the battles (the 3D
   // board handles that), else cancels an order, else leaves the full page.
   function onkey(e: KeyboardEvent) {
     unlockAudio();
@@ -170,8 +170,8 @@
           {view3d ? "Map view" : "3D view"}
         </button>
         {#if view3d}
-          <button class="small" onclick={toggleReplays} aria-pressed={replays} title="Replay each round's battles in 3D">
-            Replays {replays ? "on" : "off"}
+          <button class="small" onclick={toggleReplays} aria-pressed={replays} title="Play out each round's battles in 3D">
+            Battles {replays ? "on" : "off"}
           </button>
         {/if}
         {#if !fullPage}

@@ -52,7 +52,8 @@ test("the log waits for the 3D battles", async ({ page }) => {
     if (s.playing) {
       expect(s.latest, "log shows a round whose battles are still playing").toBeLessThanOrEqual(s.done);
       checked++;
-      await expect(board).toHaveAttribute("data-battles", "idle", { timeout: 30_000 });
+      // Rounds can follow each other without a pause; check the next one.
+      await expect(board).not.toHaveAttribute("data-replayed", String(s.done), { timeout: 30_000 });
     }
     await page.waitForTimeout(100);
   }

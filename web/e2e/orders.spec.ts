@@ -28,10 +28,11 @@ test("after sending, the source stays picked and the destination clears", async 
 
 test("ships sent this turn come off the planet at once, even on a slow link", async ({ page }) => {
   test.setTimeout(120_000);
-  // A slow network: the server's replies arrive 1.5 s late.
+  // A slow network, once it's our turn: the server's replies arrive 1.5 s late.
+  let slow = false;
   await page.routeWebSocket(/\/ws/, (ws) => {
     const server = ws.connectToServer();
-    server.onMessage((m) => setTimeout(() => ws.send(m), 1500));
+    server.onMessage((m) => (slow ? setTimeout(() => ws.send(m), 1500) : ws.send(m)));
     ws.onMessage((m) => server.send(m));
   });
   await page.goto("/");
@@ -50,6 +51,7 @@ test("ships sent this turn come off the planet at once, even on a slow link", as
   await expect(page.getByText("Your turn")).toBeVisible();
   await expect(page.getByTestId("board-3d")).toHaveAttribute("data-battles", "idle", { timeout: 30000 });
   const mine = () => page.locator(".board3d .labels .tag.mine").first().textContent();
+  slow = true;
   const before = Number((await mine())!.split(" · ")[1]);
   const home = page.locator(".sr-only button.mine").first();
   await home.dispatchEvent("click");

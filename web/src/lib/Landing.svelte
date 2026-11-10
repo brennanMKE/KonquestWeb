@@ -15,6 +15,26 @@
   let error = $state("");
   let busy = $state(false);
 
+  // A link to a room that has closed: say so up front, and offer the start
+  // page's choices instead of a Join button that can only fail.
+  let gone = $state<string | null>(null);
+  $effect(() => {
+    if (!room) return;
+    fetch(`/api/rooms/${encodeURIComponent(room)}`)
+      .then((res) => {
+        if (res.status === 404) closed(room);
+      })
+      .catch(() => {
+        // Unreachable: the Join button reports it.
+      });
+  });
+  function closed(c: string) {
+    gone = c;
+    code = "";
+    error = "";
+    history.replaceState(null, "", "/");
+  }
+
   function remember() {
     save(nameKey, name.trim());
   }
@@ -73,7 +93,8 @@
     try {
       const res = await fetch(`/api/rooms/${encodeURIComponent(c)}`);
       if (res.status === 404) {
-        error = `There's no game with code ${c}.`;
+        if (c === room) closed(c);
+        else error = `There's no game with code ${c}.`;
         return;
       }
       if (!res.ok) throw new Error(`server said ${res.status}`);
@@ -98,7 +119,14 @@
     <input bind:value={name} maxlength="24" placeholder="Commander" autocomplete="nickname" />
   </label>
 
-  {#if room}
+  {#if gone}
+    <p class="gone" role="status">
+      Game {gone} has closed. A room closes 10 minutes after everyone leaves; a game saved with "Save game" can be
+      loaded or watched below.
+    </p>
+  {/if}
+
+  {#if room && !gone}
     <form onsubmit={join}>
       <button class="primary" disabled={busy}>Join game {room}</button>
     </form>
@@ -122,6 +150,10 @@
 </main>
 
 <style>
+  .gone {
+    margin: 0;
+    color: var(--muted);
+  }
   .landing {
     position: relative;
     z-index: 1;

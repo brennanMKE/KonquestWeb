@@ -13,3 +13,11 @@ test("a link to a room that has ended says so", async ({ page }) => {
   await expect(page.locator(".seats li")).toHaveCount(1);
   expect(new URL(page.url()).searchParams.get("join")).toBeNull();
 });
+
+test("a link to a closed room says so, with no Join button", async ({ page }) => {
+  await page.goto("/?room=ZZZZ");
+  await expect(page.getByText(/Game ZZZZ has closed/)).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Join game/ })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Create game" })).toBeVisible();
+  expect(new URL(page.url()).searchParams.get("room")).toBeNull();
+});

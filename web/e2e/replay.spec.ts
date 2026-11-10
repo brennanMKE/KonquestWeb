@@ -166,3 +166,41 @@ test("autoplay in 3D waits for each round's battles and reaches the end", async 
   await page.getByRole("button", { name: "Play again" }).click();
   await expect(page.locator("header")).toContainText("Round 4 of 4", { timeout: 15_000 });
 });
+
+// A round that arrived while the camera flew home after the last one's
+// battles was never played, so autoplay waited out its 30 s fallback.
+// Fast playback hit it often. The fixture is a computers-only game from
+// bin/sim, with battles in most rounds.
+test("fast autoplay in 3D never waits out the fallback", async ({ page }) => {
+  test.setTimeout(150_000);
+  await page.goto("/");
+  await page.evaluate(() => {
+    localStorage.setItem("parallax.view", "3d");
+    localStorage.setItem("parallax.replays", "on");
+  });
+  await page.goto("/");
+  await page
+    .locator("label", { hasText: "Watch saved games" })
+    .locator("input")
+    .setInputFiles(new URL("./fixtures/battles-3d.json", import.meta.url).pathname);
+  await expect(page.getByTestId("board-3d")).toBeVisible();
+  await page.getByLabel("Speed").selectOption("4");
+  // Note the time of every round change.
+  await page.evaluate(() => {
+    const w = window as unknown as { roundTimes: number[] };
+    w.roundTimes = [performance.now()];
+    const header = document.querySelector("header")!;
+    let last = header.textContent;
+    new MutationObserver(() => {
+      if (header.textContent !== last) {
+        last = header.textContent;
+        w.roundTimes.push(performance.now());
+      }
+    }).observe(header, { subtree: true, characterData: true, childList: true });
+  });
+  await page.getByRole("button", { name: "Play", exact: true }).click();
+  await expect(page.locator("header")).toContainText("Round 12 of 25", { timeout: 120_000 });
+  const times = await page.evaluate(() => (window as unknown as { roundTimes: number[] }).roundTimes);
+  const gaps = times.slice(1).map((t, i) => t - times[i]);
+  expect(Math.max(...gaps)).toBeLessThan(20_000);
+});

@@ -23,7 +23,6 @@ Where the work stands, for picking it up in a new session. Host details stay in 
 - Arcade cabinet mode: see [arcade-plan.md](arcade-plan.md). The order bar covers keyboard and gamepad play. The rest
   (attract mode, letter entry, hot-seat) waits on whether a cabinet is planned.
 - Git history still holds old host details. Removing them needs a history rewrite and a force push. Not done.
-- A computers-only game once seemed to stall on a computer's turn during a parallel e2e run. It didn't reproduce.
 - Earlier ideas: more aggressive AI, starting clusters, an animated forces chart, a lobby faction picker.
 
 ## Resuming on another Mac

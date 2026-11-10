@@ -450,13 +450,21 @@
     replaying = true;
     const home = { pos: camera.position.clone(), target: controls.target.clone(), up: camera.up.clone() };
     let moved = false;
-    while (queue.length) {
-      const r = queue.shift()!;
-      moved = (await runReplay(r.events)) || moved;
-      doneRound = r.round;
-      onreplaydone?.(r.round);
+    // A round can arrive while the camera flies home (a fast replay); it's
+    // queued with replaying still true, so nothing else would play it.
+    // Loop until the queue stays empty.
+    for (;;) {
+      while (queue.length) {
+        const r = queue.shift()!;
+        moved = (await runReplay(r.events)) || moved;
+        doneRound = r.round;
+        onreplaydone?.(r.round);
+      }
+      if (!moved) break;
+      moved = false;
+      await flyTo(home.pos, home.target, home.up, 600);
+      if (!queue.length) break;
     }
-    if (moved) await flyTo(home.pos, home.target, home.up, 600);
     lastInput = performance.now(); // a lull starts after the replays
     replaying = false;
   }

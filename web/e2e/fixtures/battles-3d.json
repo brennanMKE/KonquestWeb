@@ -1,0 +1,676 @@
+{
+ "version": 1,
+ "seed": 7,
+ "room": "SIMS",
+ "round": 25,
+ "settings": {
+  "width": 16,
+  "height": 16,
+  "depth": 16,
+  "neutrals": 14,
+  "shipSpeed": 4,
+  "blindMap": false,
+  "neutralStats": true,
+  "captureProducesImmediately": false,
+  "maxRounds": 25,
+  "aiDelayMs": 1000,
+  "turnTimerMs": 0,
+  "disconnectGraceMs": 0
+ },
+ "seats": [
+  {
+   "name": "Player 1",
+   "kind": "ai",
+   "aiKind": "greedy"
+  },
+  {
+   "name": "Player 2",
+   "kind": "ai",
+   "aiKind": "greedy"
+  },
+  {
+   "name": "Player 3",
+   "kind": "ai",
+   "aiKind": "greedy"
+  }
+ ],
+ "actions": [
+  {
+   "kind": "end_turn",
+   "seat": 0
+  },
+  {
+   "kind": "end_turn",
+   "seat": 1
+  },
+  {
+   "kind": "end_turn",
+   "seat": 2
+  },
+  {
+   "kind": "launch",
+   "seat": 0,
+   "from": 4,
+   "to": 6,
+   "ships": 15
+  },
+  {
+   "kind": "end_turn",
+   "seat": 0
+  },
+  {
+   "kind": "launch",
+   "seat": 1,
+   "from": 1,
+   "ships": 11
+  },
+  {
+   "kind": "end_turn",
+   "seat": 1
+  },
+  {
+   "kind": "launch",
+   "seat": 2,
+   "from": 7,
+   "ships": 13
+  },
+  {
+   "kind": "end_turn",
+   "seat": 2
+  },
+  {
+   "kind": "end_turn",
+   "seat": 0
+  },
+  {
+   "kind": "launch",
+   "seat": 1,
+   "from": 1,
+   "ships": 13
+  },
+  {
+   "kind": "end_turn",
+   "seat": 1
+  },
+  {
+   "kind": "end_turn",
+   "seat": 2
+  },
+  {
+   "kind": "launch",
+   "seat": 0,
+   "from": 4,
+   "ships": 16
+  },
+  {
+   "kind": "end_turn",
+   "seat": 0
+  },
+  {
+   "kind": "end_turn",
+   "seat": 1
+  },
+  {
+   "kind": "end_turn",
+   "seat": 2
+  },
+  {
+   "kind": "end_turn",
+   "seat": 0
+  },
+  {
+   "kind": "launch",
+   "seat": 1,
+   "from": 1,
+   "ships": 15
+  },
+  {
+   "kind": "end_turn",
+   "seat": 1
+  },
+  {
+   "kind": "launch",
+   "seat": 2,
+   "from": 7,
+   "to": 9,
+   "ships": 25
+  },
+  {
+   "kind": "end_turn",
+   "seat": 2
+  },
+  {
+   "kind": "end_turn",
+   "seat": 0
+  },
+  {
+   "kind": "end_turn",
+   "seat": 1
+  },
+  {
+   "kind": "end_turn",
+   "seat": 2
+  },
+  {
+   "kind": "launch",
+   "seat": 0,
+   "from": 4,
+   "to": 2,
+   "ships": 26
+  },
+  {
+   "kind": "end_turn",
+   "seat": 0
+  },
+  {
+   "kind": "end_turn",
+   "seat": 1
+  },
+  {
+   "kind": "launch",
+   "seat": 2,
+   "from": 7,
+   "to": 9,
+   "ships": 27
+  },
+  {
+   "kind": "end_turn",
+   "seat": 2
+  },
+  {
+   "kind": "launch",
+   "seat": 0,
+   "from": 6,
+   "to": 2,
+   "ships": 33
+  },
+  {
+   "kind": "end_turn",
+   "seat": 0
+  },
+  {
+   "kind": "launch",
+   "seat": 1,
+   "from": 1,
+   "to": 2,
+   "ships": 30
+  },
+  {
+   "kind": "end_turn",
+   "seat": 1
+  },
+  {
+   "kind": "end_turn",
+   "seat": 2
+  },
+  {
+   "kind": "end_turn",
+   "seat": 0
+  },
+  {
+   "kind": "end_turn",
+   "seat": 1
+  },
+  {
+   "kind": "end_turn",
+   "seat": 2
+  },
+  {
+   "kind": "launch",
+   "seat": 0,
+   "from": 4,
+   "to": 13,
+   "ships": 33
+  },
+  {
+   "kind": "end_turn",
+   "seat": 0
+  },
+  {
+   "kind": "end_turn",
+   "seat": 1
+  },
+  {
+   "kind": "launch",
+   "seat": 2,
+   "from": 9,
+   "to": 11,
+   "ships": 42
+  },
+  {
+   "kind": "end_turn",
+   "seat": 2
+  },
+  {
+   "kind": "launch",
+   "seat": 0,
+   "from": 2,
+   "to": 11,
+   "ships": 48
+  },
+  {
+   "kind": "end_turn",
+   "seat": 0
+  },
+  {
+   "kind": "launch",
+   "seat": 1,
+   "from": 1,
+   "to": 13,
+   "ships": 33
+  },
+  {
+   "kind": "end_turn",
+   "seat": 1
+  },
+  {
+   "kind": "launch",
+   "seat": 2,
+   "from": 7,
+   "to": 13,
+   "ships": 36
+  },
+  {
+   "kind": "end_turn",
+   "seat": 2
+  },
+  {
+   "kind": "launch",
+   "seat": 0,
+   "to": 13,
+   "ships": 34
+  },
+  {
+   "kind": "end_turn",
+   "seat": 0
+  },
+  {
+   "kind": "end_turn",
+   "seat": 1
+  },
+  {
+   "kind": "launch",
+   "seat": 2,
+   "from": 9,
+   "ships": 16
+  },
+  {
+   "kind": "end_turn",
+   "seat": 2
+  },
+  {
+   "kind": "end_turn",
+   "seat": 0
+  },
+  {
+   "kind": "launch",
+   "seat": 1,
+   "from": 13,
+   "ships": 23
+  },
+  {
+   "kind": "end_turn",
+   "seat": 1
+  },
+  {
+   "kind": "launch",
+   "seat": 2,
+   "from": 9,
+   "ships": 23
+  },
+  {
+   "kind": "end_turn",
+   "seat": 2
+  },
+  {
+   "kind": "launch",
+   "seat": 0,
+   "from": 6,
+   "to": 16,
+   "ships": 49
+  },
+  {
+   "kind": "launch",
+   "seat": 0,
+   "from": 4,
+   "ships": 21
+  },
+  {
+   "kind": "launch",
+   "seat": 0,
+   "from": 11,
+   "to": 12,
+   "ships": 33
+  },
+  {
+   "kind": "end_turn",
+   "seat": 0
+  },
+  {
+   "kind": "launch",
+   "seat": 1,
+   "from": 1,
+   "ships": 21
+  },
+  {
+   "kind": "end_turn",
+   "seat": 1
+  },
+  {
+   "kind": "end_turn",
+   "seat": 2
+  },
+  {
+   "kind": "launch",
+   "seat": 0,
+   "from": 4,
+   "ships": 18
+  },
+  {
+   "kind": "end_turn",
+   "seat": 0
+  },
+  {
+   "kind": "launch",
+   "seat": 1,
+   "from": 2,
+   "ships": 26
+  },
+  {
+   "kind": "end_turn",
+   "seat": 1
+  },
+  {
+   "kind": "launch",
+   "seat": 2,
+   "from": 7,
+   "to": 12,
+   "ships": 44
+  },
+  {
+   "kind": "end_turn",
+   "seat": 2
+  },
+  {
+   "kind": "launch",
+   "seat": 0,
+   "from": 11,
+   "ships": 26
+  },
+  {
+   "kind": "end_turn",
+   "seat": 0
+  },
+  {
+   "kind": "end_turn",
+   "seat": 1
+  },
+  {
+   "kind": "launch",
+   "seat": 2,
+   "from": 9,
+   "ships": 26
+  },
+  {
+   "kind": "end_turn",
+   "seat": 2
+  },
+  {
+   "kind": "end_turn",
+   "seat": 0
+  },
+  {
+   "kind": "launch",
+   "seat": 1,
+   "from": 1,
+   "ships": 25
+  },
+  {
+   "kind": "end_turn",
+   "seat": 1
+  },
+  {
+   "kind": "launch",
+   "seat": 2,
+   "from": 13,
+   "ships": 25
+  },
+  {
+   "kind": "end_turn",
+   "seat": 2
+  },
+  {
+   "kind": "end_turn",
+   "seat": 0
+  },
+  {
+   "kind": "launch",
+   "seat": 1,
+   "from": 2,
+   "ships": 23
+  },
+  {
+   "kind": "end_turn",
+   "seat": 1
+  },
+  {
+   "kind": "launch",
+   "seat": 2,
+   "from": 7,
+   "ships": 21
+  },
+  {
+   "kind": "end_turn",
+   "seat": 2
+  },
+  {
+   "kind": "launch",
+   "seat": 0,
+   "from": 4,
+   "ships": 21
+  },
+  {
+   "kind": "launch",
+   "seat": 0,
+   "from": 11,
+   "to": 5,
+   "ships": 46
+  },
+  {
+   "kind": "end_turn",
+   "seat": 0
+  },
+  {
+   "kind": "launch",
+   "seat": 1,
+   "from": 2,
+   "ships": 30
+  },
+  {
+   "kind": "end_turn",
+   "seat": 1
+  },
+  {
+   "kind": "end_turn",
+   "seat": 2
+  },
+  {
+   "kind": "launch",
+   "seat": 0,
+   "from": 6,
+   "ships": 42
+  },
+  {
+   "kind": "end_turn",
+   "seat": 0
+  },
+  {
+   "kind": "launch",
+   "seat": 1,
+   "from": 1,
+   "ships": 28
+  },
+  {
+   "kind": "end_turn",
+   "seat": 1
+  },
+  {
+   "kind": "launch",
+   "seat": 2,
+   "from": 9,
+   "to": 6,
+   "ships": 48
+  },
+  {
+   "kind": "end_turn",
+   "seat": 2
+  },
+  {
+   "kind": "launch",
+   "seat": 0,
+   "from": 4,
+   "to": 9,
+   "ships": 55
+  },
+  {
+   "kind": "launch",
+   "seat": 0,
+   "from": 16,
+   "to": 5,
+   "ships": 47
+  },
+  {
+   "kind": "end_turn",
+   "seat": 0
+  },
+  {
+   "kind": "end_turn",
+   "seat": 1
+  },
+  {
+   "kind": "launch",
+   "seat": 2,
+   "from": 7,
+   "ships": 39
+  },
+  {
+   "kind": "end_turn",
+   "seat": 2
+  },
+  {
+   "kind": "launch",
+   "seat": 0,
+   "from": 11,
+   "to": 5,
+   "ships": 51
+  },
+  {
+   "kind": "end_turn",
+   "seat": 0
+  },
+  {
+   "kind": "launch",
+   "seat": 1,
+   "to": 4,
+   "ships": 45
+  },
+  {
+   "kind": "end_turn",
+   "seat": 1
+  },
+  {
+   "kind": "launch",
+   "seat": 2,
+   "from": 13,
+   "ships": 19
+  },
+  {
+   "kind": "end_turn",
+   "seat": 2
+  },
+  {
+   "kind": "launch",
+   "seat": 0,
+   "to": 5,
+   "ships": 17
+  },
+  {
+   "kind": "end_turn",
+   "seat": 0
+  },
+  {
+   "kind": "launch",
+   "seat": 1,
+   "from": 2,
+   "to": 5,
+   "ships": 20
+  },
+  {
+   "kind": "launch",
+   "seat": 1,
+   "from": 1,
+   "to": 6,
+   "ships": 44
+  },
+  {
+   "kind": "end_turn",
+   "seat": 1
+  },
+  {
+   "kind": "launch",
+   "seat": 2,
+   "from": 12,
+   "to": 5,
+   "ships": 16
+  },
+  {
+   "kind": "end_turn",
+   "seat": 2
+  },
+  {
+   "kind": "launch",
+   "seat": 0,
+   "from": 9,
+   "to": 5,
+   "ships": 20
+  },
+  {
+   "kind": "end_turn",
+   "seat": 0
+  },
+  {
+   "kind": "launch",
+   "seat": 1,
+   "from": 2,
+   "to": 5,
+   "ships": 22
+  },
+  {
+   "kind": "end_turn",
+   "seat": 1
+  },
+  {
+   "kind": "launch",
+   "seat": 2,
+   "from": 13,
+   "to": 5,
+   "ships": 16
+  },
+  {
+   "kind": "end_turn",
+   "seat": 2
+  },
+  {
+   "kind": "end_turn",
+   "seat": 0
+  },
+  {
+   "kind": "end_turn",
+   "seat": 1
+  },
+  {
+   "kind": "end_turn",
+   "seat": 2
+  }
+ ]
+}

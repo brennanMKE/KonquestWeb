@@ -49,3 +49,27 @@ test("the sound button says so when the browser won't play", async ({ page }) =>
   await expect(button).toHaveText("Sound blocked");
   await expect(button).toHaveAttribute("title", /not allowed/);
 });
+
+test("audio that says it's running with its clock stopped is replaced", async ({ page }) => {
+  await page.addInitScript(() => {
+    const w = window as unknown as { contexts: number };
+    w.contexts = 0;
+    const Orig = AudioContext;
+    window.AudioContext = class extends Orig {
+      constructor(o?: AudioContextOptions) {
+        super(o);
+        w.contexts++;
+        // The Safari bug: running, but the clock never moves.
+        if (w.contexts === 1) Object.defineProperty(this, "currentTime", { get: () => 0 });
+      }
+    };
+  });
+  await startGame(page);
+  const contexts = () => page.evaluate(() => (window as unknown as { contexts: number }).contexts);
+  await page.mouse.click(5, 300);
+  await expect.poll(contexts).toBe(1);
+  await page.waitForTimeout(1200); // the clock check, a suspend and resume, a second check
+  await page.mouse.click(5, 300);
+  await expect.poll(contexts).toBe(2);
+  await expect(page.locator("button.sound")).toHaveAttribute("data-audio", "running");
+});

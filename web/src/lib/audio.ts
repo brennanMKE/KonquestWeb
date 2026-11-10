@@ -56,7 +56,9 @@ function notify() {
   const s = audioStatus();
   if (s === reported) return;
   reported = s;
-  if (s === "blocked") console.warn(`Parallax: the browser isn't playing sound (audio ${ac?.state ?? "not created"})${lastError ? `: ${lastError}` : ""}`);
+  // A hidden tab's audio is suspended on purpose; that's not news.
+  const hidden = typeof document !== "undefined" && document.visibilityState === "hidden";
+  if (s === "blocked" && !hidden) console.warn(`Parallax: the browser isn't playing sound (audio ${ac?.state ?? "not created"})${lastError ? `: ${lastError}` : ""}`);
   if (s === "unsupported") console.warn(`Parallax: no sound: ${lastError || "this browser has no Web Audio"}`);
   for (const f of listeners) f(s);
 }
@@ -84,42 +86,28 @@ export function unlockAudio(e?: Event | "retry"): Promise<AudioStatus> {
   if (!enabled) return Promise.resolve(audioStatus());
   // Only a click or key press counts toward "blocked": not a sound retrying,
   // not a tab coming back.
-  if (e !== "retry" && e?.type !== "visibilitychange") gestured = true;
-  // A closed context can't come back; start a new one.
+  const gesture = e !== "retry" && e?.type !== "visibilitychange";
+  if (gesture) gestured = true;
+  // A closed context can't come back. A stale one (it wouldn't resume, or
+  // its clock stopped) is replaced, but only during a gesture: a context
+  // made outside one starts suspended in Safari.
   if (ac?.state === "closed") ac = null;
-  if (!ac) {
-    const AC = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-    if (!AC) {
-      unsupported = true;
-      notify();
-      return Promise.resolve(audioStatus());
-    }
-    try {
-      ac = new AC();
-    } catch (err) {
-      unsupported = true;
-      lastError = `couldn't start audio: ${(err as Error).message}`;
-      notify();
-      return Promise.resolve(audioStatus());
-    }
-    ac.addEventListener("statechange", notify);
-    const comp = ac.createDynamicsCompressor();
-    comp.connect(ac.destination);
-    out = ac.createGain();
-    out.gain.value = 0.35;
-    out.connect(comp);
-    noiseBuf = ac.createBuffer(1, ac.sampleRate, ac.sampleRate);
-    const d = noiseBuf.getChannelData(0);
-    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  if (ac && stale && gesture) {
+    ac.close().catch(() => {});
+    ac = null;
   }
-  // Suspended, or "interrupted" (Safari, after sleep or an output device
-  // change): resume. Anything but running needs it. Some browsers never
-  // settle the promise when they refuse, so don't wait more than a second.
-  if (ac.state === "running") {
+  if (!ac && !createContext()) return Promise.resolve(audioStatus());
+  const ctx = ac!;
+  if (ctx.state === "running") {
+    // Safari can report running while playing nothing; check its clock.
+    if (gesture) checkClock(ctx);
     notify();
     return Promise.resolve(audioStatus());
   }
-  const ctx = ac;
+  // Suspended, or "interrupted" (Safari: a hidden tab, sleep, another app
+  // taking the output): resume, synchronously within the gesture. Safari
+  // sometimes never settles the promise, so don't wait more than a second;
+  // a context that didn't come back is replaced on the next gesture.
   return Promise.race([
     ctx.resume().then(
       () => (lastError = ""),
@@ -127,9 +115,73 @@ export function unlockAudio(e?: Event | "retry"): Promise<AudioStatus> {
     ),
     new Promise((r) => setTimeout(r, 1000)),
   ]).then(() => {
+    if (ctx === ac && gesture) {
+      if (ctx.state === "running") checkClock(ctx);
+      else stale = true;
+    }
     notify();
     return audioStatus();
   });
+}
+
+// A context to replace at the next gesture.
+let stale = false;
+
+function createContext(): boolean {
+  stale = false;
+  const AC = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+  if (!AC) {
+    unsupported = true;
+    notify();
+    return false;
+  }
+  try {
+    ac = new AC();
+  } catch (err) {
+    unsupported = true;
+    lastError = `couldn't start audio: ${(err as Error).message}`;
+    notify();
+    return false;
+  }
+  ac.addEventListener("statechange", notify);
+  const comp = ac.createDynamicsCompressor();
+  comp.connect(ac.destination);
+  out = ac.createGain();
+  out.gain.value = 0.35;
+  out.connect(comp);
+  noiseBuf = ac.createBuffer(1, ac.sampleRate, ac.sampleRate);
+  const d = noiseBuf.getChannelData(0);
+  for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  return true;
+}
+
+// Safari (WebKit bugs 263627, 276016, 283419) can leave a context
+// "running" with its clock stopped and no sound. Within a gesture, check
+// that the clock moves; if not, suspend and resume it, and if that doesn't
+// start it, replace the context at the next gesture. At most every 5 s.
+let lastClockCheck = -Infinity;
+function checkClock(ctx: AudioContext) {
+  const now = performance.now();
+  if (now - lastClockCheck < 5000) return;
+  lastClockCheck = now;
+  const t0 = ctx.currentTime;
+  setTimeout(() => {
+    if (ctx !== ac || ctx.state !== "running" || ctx.currentTime > t0) return;
+    console.warn("Parallax: audio says it's running but its clock stopped; restarting it");
+    ctx
+      .suspend()
+      .then(() => ctx.resume())
+      .catch(() => {})
+      .finally(() => {
+        const t1 = ctx.currentTime;
+        setTimeout(() => {
+          if (ctx === ac && (ctx.state !== "running" || ctx.currentTime <= t1)) {
+            stale = true;
+            notify();
+          }
+        }, 300);
+      });
+  }, 300);
 }
 
 /** Turns sound on if need be and plays a short tone, to check it's heard. */
@@ -140,11 +192,18 @@ export async function testSound(): Promise<AudioStatus> {
   return s;
 }
 
-// Browsers suspend audio in a hidden tab or across sleep. Coming back to
-// the tab resumes it, once a gesture has allowed sound at all.
+// Browsers suspend audio in a hidden tab or across sleep, and Safari can
+// come back from that "running" but silent (WebKit bugs 276687, 281566).
+// So suspend it ourselves when the tab hides, and resume shortly after it
+// shows again, as Phaser does.
 if (typeof document !== "undefined") {
   document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "visible" && ac && enabled) unlockAudio(new Event("visibilitychange"));
+    if (!ac || !enabled) return;
+    if (document.visibilityState === "hidden") {
+      if (ac.state === "running") ac.suspend().catch(() => {});
+    } else {
+      setTimeout(() => unlockAudio(new Event("visibilitychange")), 100);
+    }
   });
   // iOS Safari doesn't count pointerdown (a touch starting) as a gesture
   // that may start audio; touchend and click are. Listen on every page,

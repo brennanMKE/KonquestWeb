@@ -34,16 +34,20 @@ model (Laya) on :8799 if it's installed, and keeps open rooms in `.run/rooms` (`
   briefly. Check the server's log for a game in progress (`game started` without a later `game over`) and ask before
   restarting.
 
-### `scripts/deploy.sh`: photon and yoyo
+### `scripts/deploy.sh`: deployed servers
 
 ```sh
-scripts/deploy.sh photon            # build main, ship it, restart, check
-scripts/deploy.sh yoyo
-scripts/deploy.sh both
-scripts/deploy.sh photon --check    # only check what's live
-scripts/deploy.sh photon --rollback # the release before this one
-scripts/deploy.sh yoyo --no-build   # ship bin/parallax-linux-arm64 as it is
+scripts/deploy.sh <target>            # build main, ship it, restart, check
+scripts/deploy.sh all                 # every target
+scripts/deploy.sh <target> --check    # only check what's live
+scripts/deploy.sh <target> --rollback # the build before this one
+scripts/deploy.sh <target> --no-build # ship the existing build as it is
 ```
+
+The targets, and their ssh aliases, URLs, ports and install layouts, are in `.env` at the repo root (gitignored).
+[.env.example](.env.example) shows the format. Host names, addresses, ports and network details never go in tracked
+files: not in scripts, docs, tests or commit messages. Write `game.example.com` in examples. [DEPLOY.md](DEPLOY.md) is
+the guide for anyone running their own server; keep it working for a stranger.
 
 **Only Brennan runs deploys.** They are production changes. An agent may write and test the script, build the binary,
 and run `--check`, but must not deploy or roll back, and must not ssh to either host to change anything.
@@ -52,12 +56,12 @@ What a deploy does:
 
 1. Builds from `main`. The checkout must be clean and match `origin/main`, so commit and push first.
 2. Copies the binary to `/tmp/parallax-<commit>` on the host and checks its sha256 there.
-3. Installs the binary the way the host expects, then restarts the `parallax` unit:
-   - **photon:** `/opt/parallax/releases/<commit>/parallax` (root:root 0755), `restorecon`, then
-     `/opt/parallax/current` links to it. It keeps the live release and the 3 before it.
-   - **yoyo:** `/usr/local/bin/parallax`, with the previous build kept as `parallax.prev`.
-4. Checks `/healthz` locally and through the public URL, `/og.jpg`, a 404 from an unknown room's `/replay`, and the
-   unit's journal (`reopened saved rooms`, `System 1 model is up`, errors).
+3. Installs it according to the target's layout, then restarts the unit:
+   - **releases:** `DIR/releases/<commit>`, then `DIR/current` links to it, with `restorecon` where SELinux runs.
+     It keeps the live release and the 3 before it.
+   - **single:** the binary is replaced, and the previous one is kept as `.prev`.
+4. Checks `/healthz` on the host and through the public URL, `/og.jpg`, `/api/demo`, a 404 from an unknown room's
+   `/replay`, and the unit's journal. URLs are left out of the printed journal lines.
 
 Safety:
 
@@ -65,26 +69,15 @@ Safety:
 - It refuses `--rollback` to a build older than e847c8e. Those builds don't know `-state`, so they wouldn't start under
   the current unit.
 
-| Host | URL | Port | Units, config and secrets owned by |
-| --- | --- | --- | --- |
-| photon (EC2, arm64) | https://parallax.sstools.co | 127.0.0.1:8114, behind Apache | the AWS repo, `~/Developer/AWS` (session aws-30) |
-| yoyo (Raspberry Pi 5, tailnet) | https://yoyo.sawfish-byzantine.ts.net | 127.0.0.1:8080, behind `tailscale serve` | the Homelab repo, `~/Developer/Homelab` (session homelab-b8) |
-
-The script replaces only the binary. Never touch these from this repo:
+The script replaces only the binary. Never touch any of these from this repo:
 
 - systemd units and their drop-ins
-- photon's port registry (`/etc/photon`)
-- `/etc/parallax`: it holds the System 1 key. Never read, copy or log it.
-- Apache vhosts and certificates
-- `/etc/hosts`, or anything Tailscale
-- the Laya model service on yoyo
-- saved rooms in `/var/lib/parallax`: they hold seat tokens. Never copy or print them.
+- port registries
+- the System 1 key's environment file: never read, copy or log it
+- proxy or VPN configuration, and certificates
+- `/etc/hosts`
+- the model service
+- saved rooms: they hold seat tokens. Never copy or print them.
 
-Changes to any of these go to the session that owns them. If a build needs a new flag in the unit, add it to the unit
-there before the deploy.
-
-On yoyo, the Homelab repo's own `yoyo/parallax/deploy.sh` pins a sha256. After a deploy from here, that pin is behind:
-its script refuses to run until the pin is updated.
-
-The System 1 model runs on yoyo (`deploy/laya/`). photon's computer players call it over the tailnet with a Bearer key.
-If the model is unreachable, they play as Planner.
+Brennan's own hosts have their configuration in separate ops repos, each looked after by its own agent session. Changes
+to any of the above go there. If a build needs a new flag in a unit, add it there before the deploy.

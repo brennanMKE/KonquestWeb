@@ -26,8 +26,9 @@ func main() {
 	s1Key := flag.String("system1-key", os.Getenv("PARALLAX_SYSTEM1_KEY"), "API key for the System 1 endpoint, sent as a Bearer token (default $PARALLAX_SYSTEM1_KEY, which keeps it out of the process list)")
 	s1Batch := flag.Bool("system1-batch", true, "send several states per request; off sends one request per state")
 	s1Timeout := flag.Duration("system1-timeout", 15*time.Second, "longest wait for one System 1 decision before playing Planner that turn")
+	publicURL := flag.String("public-url", os.Getenv("PARALLAX_PUBLIC_URL"), `the site's address as players reach it, e.g. https://game.example.com, for link previews (default $PARALLAX_PUBLIC_URL, else worked out from each request)`)
 	stateDir := flag.String("state", "", "directory to keep open rooms in across restarts (off when empty); rooms are saved there every 30 s and at shutdown, and reopened at start")
-	origins := flag.String("origin", "", "comma-separated hosts whose pages may connect, for a proxy that rewrites Host (e.g. yoyo.example.ts.net)")
+	origins := flag.String("origin", "", "comma-separated hosts whose pages may connect, for a proxy that rewrites Host (e.g. game.example.ts.net)")
 	flag.Parse()
 
 	level := slog.LevelInfo
@@ -53,7 +54,7 @@ func main() {
 		defaultAI = proto.AISystem1
 	}
 
-	handler := server.New(server.Options{Dev: *dev, Origins: splitList(*origins), Static: static(), Logger: log, Room: room.Options{AI: players, DefaultAI: defaultAI}})
+	handler := server.New(server.Options{Dev: *dev, Origins: splitList(*origins), Static: static(), PublicURL: *publicURL, Logger: log, Room: room.Options{AI: players, DefaultAI: defaultAI}})
 	if health != nil {
 		// Lobbies show System 1 only while the model answers.
 		health.changed = handler.Rooms().RefreshLobbies

@@ -7,13 +7,15 @@
     <title>Parallax</title>
     <meta name="description" content="Conquer the galaxy, one fleet at a time. A multiplayer space strategy game in your browser, on flat or 3D maps." />
     <!-- Link previews (Slack, iMessage, Discord, social sites). Images need
-         an absolute URL; regenerate og.jpg with `make shots`. -->
+         an absolute URL: the server fills in {{PUBLIC_URL}} with its own
+         (-public-url, or the address it was reached at). Regenerate og.jpg
+         with `make shots`. -->
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Parallax" />
     <meta property="og:title" content="Parallax" />
     <meta property="og:description" content="Conquer the galaxy, one fleet at a time. Multiplayer space strategy in your browser, on flat or 3D maps." />
-    <meta property="og:url" content="https://parallax.sstools.co/" />
-    <meta property="og:image" content="https://parallax.sstools.co/og.jpg" />
+    <meta property="og:url" content="{{PUBLIC_URL}}/" />
+    <meta property="og:image" content="{{PUBLIC_URL}}/og.jpg" />
     <meta property="og:image:type" content="image/jpeg" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />

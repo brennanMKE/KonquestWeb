@@ -1,0 +1,35 @@
+# An example systemd unit for the Parallax game server. Copy it to
+# /etc/systemd/system/parallax.service, adjust ExecStart, then:
+#   sudo systemctl daemon-reload && sudo systemctl enable --now parallax
+[Unit]
+Description=Parallax game server
+Documentation=https://github.com/brennanMKE/Parallax
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+# The binary from `make linux-arm64` or `make linux-amd64`, copied here.
+ExecStart=/usr/local/bin/parallax -addr 127.0.0.1:8080 -state /var/lib/parallax/rooms
+# Optional: the site's public address for link previews, if the proxy
+# doesn't pass X-Forwarded-Proto and X-Forwarded-Host.
+#Environment=PARALLAX_PUBLIC_URL=https://game.example.com
+# Optional: System 1 computer players (see deploy/laya/README.md). Keep the
+# key in a root-only file: PARALLAX_SYSTEM1_KEY=...
+#EnvironmentFile=/etc/parallax/system1.env
+#ExecStart=
+#ExecStart=/usr/local/bin/parallax -addr 127.0.0.1:8080 -state /var/lib/parallax/rooms -system1 http://127.0.0.1:8799/predict
+
+DynamicUser=yes
+# Open rooms (seat tokens included) are saved here every 30 s and on stop,
+# and reopened at start, so a restart doesn't end anyone's game.
+StateDirectory=parallax
+StateDirectoryMode=0700
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target

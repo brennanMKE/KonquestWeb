@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"testing/fstest"
 	"time"
 
 	"github.com/coder/websocket"
@@ -395,12 +396,12 @@ func TestOrigins(t *testing.T) {
 	quiet := slog.New(slog.NewTextHandler(io.Discard, nil))
 	plain := httptest.NewServer(New(Options{Logger: quiet}))
 	defer plain.Close()
-	if dial(plain, "https://yoyo.example.ts.net") == nil {
+	if dial(plain, "https://game.example.ts.net") == nil {
 		t.Fatal("a page on another host connected")
 	}
-	proxied := httptest.NewServer(New(Options{Logger: quiet, Origins: []string{"yoyo.example.ts.net"}}))
+	proxied := httptest.NewServer(New(Options{Logger: quiet, Origins: []string{"game.example.ts.net"}}))
 	defer proxied.Close()
-	if err := dial(proxied, "https://yoyo.example.ts.net"); err != nil {
+	if err := dial(proxied, "https://game.example.ts.net"); err != nil {
 		t.Fatalf("an allowed origin: %v", err)
 	}
 	if dial(proxied, "https://evil.example") == nil {
@@ -435,5 +436,47 @@ func BenchmarkDemo(b *testing.B) {
 		if _, err := newDemo(uint64(i)); err != nil {
 			b.Fatal(err)
 		}
+	}
+}
+
+func TestIndexPublicURL(t *testing.T) {
+	static := fstest.MapFS{"index.html": {Data: []byte(`<meta property="og:image" content="{{PUBLIC_URL}}/og.jpg" />`)}}
+	page := func(opts Options, host string, headers map[string]string) string {
+		opts.Static = static
+		ts := httptest.NewServer(New(opts))
+		defer ts.Close()
+		req, _ := http.NewRequest("GET", ts.URL+"/", nil)
+		req.Host = host
+		for k, v := range headers {
+			req.Header.Set(k, v)
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		b, _ := io.ReadAll(resp.Body)
+		return string(b)
+	}
+	for _, c := range []struct {
+		opts    Options
+		host    string
+		headers map[string]string
+		want    string
+	}{
+		{Options{}, "localhost:8080", nil, "http://localhost:8080/og.jpg"},
+		{Options{}, "127.0.0.1:8080", nil, "http://127.0.0.1:8080/og.jpg"},
+		{Options{}, "game.example.com", nil, "https://game.example.com/og.jpg"},
+		{Options{}, "127.0.0.1:9000", map[string]string{"X-Forwarded-Host": "game.example.com", "X-Forwarded-Proto": "https"}, "https://game.example.com/og.jpg"},
+		{Options{}, "game.example.com", map[string]string{"X-Forwarded-Proto": "http"}, "http://game.example.com/og.jpg"},
+		{Options{PublicURL: "https://play.example.org/"}, "localhost", nil, "https://play.example.org/og.jpg"},
+	} {
+		if got := page(c.opts, c.host, c.headers); !strings.Contains(got, `content="`+c.want+`"`) {
+			t.Errorf("host %q %v: got %s, want %s", c.host, c.headers, got, c.want)
+		}
+	}
+	// A forged forwarded host can't break out of the attribute.
+	if got := page(Options{}, "localhost", map[string]string{"X-Forwarded-Host": `x"><script>`}); strings.Contains(got, "<script>") {
+		t.Errorf("unescaped host: %s", got)
 	}
 }

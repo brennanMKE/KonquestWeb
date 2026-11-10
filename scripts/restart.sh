@@ -13,7 +13,7 @@
 #
 # Open rooms survive the restart: the server keeps them in .run/rooms
 # (-state) and reopens them, so players rejoin where they were. The server binary itself leaves
-# System 1 off unless -system1 is given, as on photon.
+# System 1 off unless -system1 is given.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -39,7 +39,7 @@ fi
 laya_dir="${LAYA_DIR:-$HOME/Library/Application Support/System 1 Arcade/agent}"
 laya_url=http://127.0.0.1:8799/predict
 args=("$@")
-if [[ " $* " == *" -system1 off "* || " $* " == *" -system1 off" ]]; then
+if [[ " $* " == *" -system1 off "* ]]; then
   # Drop "-system1 off": the server's default is already off.
   args=()
   skip=0

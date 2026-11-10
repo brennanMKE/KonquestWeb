@@ -18,7 +18,7 @@ make sim ARGS="-seed 7 -depth 4"   # a seeded AI-vs-AI game on a 3D map, with it
 make build && bin/server            # one binary with the web client; open http://localhost:8080
 make e2e                           # browser tests (Playwright)
 scripts/restart.sh                 # stop the running server, rebuild and start again
-scripts/deploy.sh photon            # build main, ship it to photon (or yoyo, both), restart and check; --rollback, --check
+scripts/deploy.sh <target>         # build, ship to your server (set up in .env), restart and check; see DEPLOY.md
 make shots                         # regenerate the link preview and README images from a seeded game
 ```
 
@@ -149,6 +149,12 @@ A `Dockerfile` builds the same single binary into a small image (`docker build -
 
 For client development, run `make dev` (the Go server on :8080) and `cd web && npm run dev`; Vite
 proxies the API and WebSocket to the Go server.
+
+## Run your own server
+
+Parallax is one binary with no database: build it with `make linux-arm64` (or `linux-amd64`), run it under systemd
+behind any HTTPS proxy, and update it with `scripts/deploy.sh`. [DEPLOY.md](DEPLOY.md) walks through it, with an
+example unit and Caddy and nginx configs in [deploy/examples](deploy/examples).
 
 ## License
 

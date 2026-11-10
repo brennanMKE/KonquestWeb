@@ -1,48 +1,53 @@
 #!/usr/bin/env bash
 # shellcheck disable=SC2329 # install_/rollback_ functions are called by name
-# Deploy the Parallax game server to photon or yoyo, or roll one back.
+# Deploy the Parallax game server to a host, or roll one back.
 #
-#   scripts/deploy.sh photon            # build main's HEAD, ship it, restart, check
-#   scripts/deploy.sh yoyo
-#   scripts/deploy.sh both
-#   scripts/deploy.sh photon --rollback # back to the release before this one
-#   scripts/deploy.sh photon --check    # only run the checks against what's live
-#   scripts/deploy.sh yoyo --no-build   # ship bin/parallax-linux-arm64 as it is
+#   scripts/deploy.sh <target>             # build main's HEAD, ship it, restart, check
+#   scripts/deploy.sh all                  # every target in DEPLOY_TARGETS
+#   scripts/deploy.sh <target> --rollback  # back to the build before this one
+#   scripts/deploy.sh <target> --check     # only run the checks against what's live
+#   scripts/deploy.sh <target> --no-build  # ship bin/parallax-linux-<arch> as it is
 #
-# It only replaces the binary. The systemd units, Apache vhosts, tailscale
-# serve, the Laya model and the System 1 key belong to the ops repos
-# (~/Developer/AWS for photon, ~/Developer/Homelab for yoyo) and are never
-# touched here; the script only checks that the unit has what this build
-# needs (-state, so rooms survive the restart).
+# Targets, their ssh aliases, URLs, ports and install layouts come from .env
+# at the repo root (gitignored). Copy .env.example to .env and fill it in;
+# nothing about the hosts lives in this script or the repo.
 #
-# Open games survive a deploy: the server saves its rooms on SIGTERM and
-# reopens them at start, and browsers reconnect with their seat tokens.
+# It only replaces the binary. Units, reverse proxies, VPNs, the System 1
+# model and its key belong to the hosts' own ops repos and are never touched
+# here; the script only checks that the unit starts the server with -state,
+# so open games survive the restart (the server saves its rooms on SIGTERM
+# and reopens them at start).
 #
-# Hosts:
-#   photon  EC2, https://parallax.sstools.co. Releases live in
-#           /opt/parallax/releases/<commit>/parallax; /opt/parallax/current
-#           links to the live one. The live release and the 3 before it
-#           are kept for --rollback. Releases are root:root 0755 and get
-#           their SELinux labels back with restorecon.
-#   yoyo    Raspberry Pi 5, https://yoyo.sawfish-byzantine.ts.net (tailnet).
-#           The binary is /usr/local/bin/parallax; the one before it is kept
-#           as /usr/local/bin/parallax.prev for --rollback. Note that the
-#           Homelab repo's yoyo/parallax/deploy.sh pins a sha256: after a
-#           deploy from here, update that pin before running it again.
+# Layouts (TARGET_LAYOUT):
+#   releases  TARGET_DIR/releases/<commit>/parallax, root:root 0755, with
+#             TARGET_DIR/current linking to the live one; the live release and
+#             the 3 before it are kept for --rollback. SELinux labels are
+#             restored when restorecon exists.
+#   single    TARGET_BIN is the binary; the one before it is kept as
+#             TARGET_BIN.prev for --rollback.
 #
-# Both are linux/arm64. Needs ssh aliases `photon` and `yoyo` with sudo on the
-# far side. Brennan runs it: it's a production deploy.
+# Hosts run Linux (TARGET_ARCH arm64, the default, or amd64) and are reached
+# over ssh with sudo on the far side. DEPLOY.md covers setting one up.
 #
-# Never touched: units and drop-ins, /etc/photon (ports), /etc/parallax (the
-# key: never read), vhosts and certs, /etc/hosts, Tailscale, and the saved
-# rooms in /var/lib/parallax (they hold seat tokens).
+# Never touched: units and drop-ins, port registries, the key's env file
+# (never read), proxy and VPN config, and the saved rooms (they hold seat
+# tokens).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 die() { printf 'deploy: %s\n' "$*" >&2; exit 1; }
 say() { printf '==> %s\n' "$*"; }
 
-usage() { sed -n '3,11p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
+usage() { sed -n '3,9p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
+
+ENV_FILE="${DEPLOY_ENV:-.env}"
+[[ -f "$ENV_FILE" ]] || die "no $ENV_FILE: copy .env.example to .env and fill in the hosts"
+set -a
+# shellcheck source=/dev/null
+. "$ENV_FILE"
+set +a
+[[ -n "${DEPLOY_TARGETS:-}" ]] || die "$ENV_FILE sets no DEPLOY_TARGETS"
+read -r -a all_targets <<<"$DEPLOY_TARGETS"
 
 target="${1:-}"
 [[ -n "$target" ]] || usage
@@ -58,43 +63,59 @@ for a in "$@"; do
     *) die "unknown option $a" ;;
   esac
 done
-case "$target" in
-  photon | yoyo) hosts=("$target") ;;
-  both) hosts=(photon yoyo) ;;
-  *) usage ;;
-esac
+if [[ "$target" == all ]]; then
+  hosts=("${all_targets[@]}")
+elif [[ " ${all_targets[*]} " == *" $target "* ]]; then
+  hosts=("$target")
+else
+  die "unknown target $target; $ENV_FILE lists: ${all_targets[*]}"
+fi
 
-BIN=bin/parallax-linux-arm64
-KEEP=4 # the live release and the 3 before it (photon)
+KEEP=4 # releases layout: the live release and the 3 before it
 
-# Per-host settings.
+# setting NAME KEY: the value of <NAME>_<KEY> from .env, e.g. ALPHA_URL.
+setting() {
+  local var
+  var="$(printf '%s_%s' "$1" "$2" | tr '[:lower:]-' '[:upper:]_')"
+  printf '%s' "${!var:-}"
+}
+
+# Per-target settings, all from .env.
 setup() {
-  case "$1" in
-    photon)
-      HOST="${PHOTON_HOST:-photon}"
-      URL=https://parallax.sstools.co
-      UNIT=parallax
-      # The port comes from photon's port registry (/etc/photon/ports.conf).
-      LOCAL=http://127.0.0.1:8114
-      ;;
-    yoyo)
-      HOST="${YOYO_HOST:-yoyo}"
-      URL=https://yoyo.sawfish-byzantine.ts.net
-      UNIT=parallax
-      LOCAL=http://127.0.0.1:8080
-      ;;
+  local t=$1
+  HOST=$(setting "$t" SSH)
+  URL=$(setting "$t" URL)
+  PORT=$(setting "$t" PORT)
+  LAYOUT=$(setting "$t" LAYOUT)
+  UNIT=$(setting "$t" UNIT)
+  UNIT=${UNIT:-parallax}
+  DIR=$(setting "$t" DIR)
+  ARCH=$(setting "$t" ARCH)
+  ARCH=${ARCH:-arm64}
+  [[ "$ARCH" == arm64 || "$ARCH" == amd64 ]] || die "$t: _ARCH must be arm64 or amd64"
+  TBIN=$(setting "$t" BIN)
+  [[ -n "$HOST" && -n "$URL" && -n "$PORT" ]] || die "$t: set its _SSH, _URL and _PORT in $ENV_FILE"
+  case "$LAYOUT" in
+    releases) [[ -n "$DIR" ]] || die "$t: the releases layout needs _DIR" ;;
+    single) [[ -n "$TBIN" ]] || die "$t: the single layout needs _BIN" ;;
+    *) die "$t: _LAYOUT must be releases or single" ;;
   esac
+  LOCAL=http://127.0.0.1:$PORT
   SSH=(ssh -o BatchMode=yes -o ConnectTimeout=10 "$HOST")
 }
 
+# Builds (once per run and architecture) and fingerprints the binary.
+built=""
 build_binary() {
-  if ((build)); then
+  BIN=bin/parallax-linux-$ARCH
+  if ((build)) && [[ " $built " != *" $ARCH "* ]]; then
     [[ -z "$(git status --porcelain --untracked-files=no)" ]] || die "uncommitted changes; commit them or use --no-build"
     [[ "$(git rev-parse --abbrev-ref HEAD)" == main ]] || die "not on main"
     git fetch -q origin main
     [[ "$(git rev-parse HEAD)" == "$(git rev-parse origin/main)" ]] || die "main isn't the same as origin/main; push or pull first"
     say "Building $BIN"
-    make -s linux-arm64
+    make -s "linux-$ARCH"
+    built="$built $ARCH"
   fi
   [[ -f "$BIN" ]] || die "no $BIN; run without --no-build"
   COMMIT=$(git rev-parse --short=7 HEAD)
@@ -105,140 +126,144 @@ build_binary() {
 # The unit must start the server with -state, or a restart ends every game.
 check_unit() {
   if ! "${SSH[@]}" "systemctl cat $UNIT 2>/dev/null | grep -q -- '-state '"; then
-    die "$HOST: the $UNIT unit has no -state flag, so restarting would end every open game. Add it in the ops repo first."
+    die "$1: the $UNIT unit has no -state flag, so restarting would end every open game. Add it in the host's ops repo first."
   fi
 }
 
 # Copies the binary to /tmp/parallax-<commit> on the host and checks it
 # arrived intact.
 ship() {
-  STAGE=/tmp/parallax-$COMMIT
-  scp -q "$BIN" "$HOST:$STAGE"
-  "${SSH[@]}" "echo '$SHA  $STAGE' | sha256sum -c --quiet" || die "$HOST: the uploaded binary doesn't match sha256 $SHA"
+  local stage=/tmp/parallax-$COMMIT
+  scp -q "$BIN" "$HOST:$stage"
+  "${SSH[@]}" "echo '$SHA  $stage' | sha256sum -c --quiet" || die "$1: the uploaded binary doesn't match sha256 $SHA"
 }
 
-install_photon() {
-  "${SSH[@]}" bash -s -- "$COMMIT" "$SHA" "$KEEP" <<'REMOTE'
+install_releases() {
+  "${SSH[@]}" bash -s -- "$COMMIT" "$SHA" "$KEEP" "$DIR" "$UNIT" <<'REMOTE'
 set -euo pipefail
-commit=$1 sha=$2 keep=$3
+commit=$1 sha=$2 keep=$3 base=$4 unit=$5
 stage=/tmp/parallax-$commit
-dir=/opt/parallax/releases/$commit
+dir=$base/releases/$commit
 if [[ -f "$dir/parallax" ]] && echo "$sha  $dir/parallax" | sha256sum -c --quiet 2>/dev/null; then
-  echo "photon: releases/$commit is already installed; switching to it"
+  echo "releases/$commit is already installed; switching to it"
 else
   sudo install -d -m 0755 "$dir"
   sudo install -o root -g root -m 0755 "$stage" "$dir/parallax"
 fi
 rm -f "$stage"
-sudo restorecon -R /opt/parallax
-sudo ln -sfn "releases/$commit" /opt/parallax/current
-sudo systemctl restart parallax
+if command -v restorecon >/dev/null; then sudo restorecon -R "$base"; fi
+sudo ln -sfn "releases/$commit" "$base/current"
+sudo systemctl restart "$unit"
 sleep 3
-echo "photon: current -> $(readlink /opt/parallax/current)"
+echo "current -> $(readlink "$base/current")"
 # Keep the newest few releases; never the live one.
-cd /opt/parallax/releases
+cd "$base/releases"
 ls -1t | grep -vx "$commit" | tail -n +"$keep" | while read -r old; do
-  echo "photon: pruning releases/$old"
-  sudo rm -rf -- "/opt/parallax/releases/$old"
+  echo "pruning releases/$old"
+  sudo rm -rf -- "${base:?}/releases/$old"
 done
 REMOTE
 }
 
-install_yoyo() {
-  "${SSH[@]}" bash -s -- "$COMMIT" <<'REMOTE'
+install_single() {
+  "${SSH[@]}" bash -s -- "$COMMIT" "$TBIN" "$UNIT" <<'REMOTE'
 set -euo pipefail
-stage=/tmp/parallax-$1
-if sudo cmp -s "$stage" /usr/local/bin/parallax; then
-  echo "yoyo already runs this build; restarting anyway"
+stage=/tmp/parallax-$1 bin=$2 unit=$3
+if sudo cmp -s "$stage" "$bin"; then
+  echo "already running this build; restarting anyway"
 else
-  sudo cp -p /usr/local/bin/parallax /usr/local/bin/parallax.prev 2>/dev/null || true
-  sudo install -o root -g root -m 755 "$stage" /usr/local/bin/parallax
+  sudo cp -p "$bin" "$bin.prev" 2>/dev/null || true
+  sudo install -o root -g root -m 755 "$stage" "$bin"
 fi
 rm -f "$stage"
-sudo systemctl restart parallax
+sudo systemctl restart "$unit"
 REMOTE
 }
 
-rollback_photon() {
-  "${SSH[@]}" bash -s <<'REMOTE'
+# A rollback target must accept -state, which the unit passes; builds before
+# e847c8e don't, so they wouldn't start. Rolling back that far needs the unit
+# changed too, in the host's ops repo.
+rollback_releases() {
+  "${SSH[@]}" bash -s -- "$DIR" "$UNIT" <<'REMOTE'
 set -euo pipefail
-cd /opt/parallax
+base=$1 unit=$2
+cd "$base"
 live=$(basename "$(readlink current)")
 prev=$(ls -1t releases | grep -vx "$live" | head -1)
 [[ -n "$prev" ]] || { echo "no earlier release to roll back to" >&2; exit 1; }
-# The unit passes -state; builds before e847c8e don't know it and won't start.
 if ! "releases/$prev/parallax" -h 2>&1 | grep -q -- '-state'; then
-  echo "releases/$prev predates -state, which the unit passes, so it wouldn't start. Rolling back that far needs the unit changed too (the AWS session's part)." >&2
+  echo "releases/$prev predates -state, which the unit passes, so it wouldn't start" >&2
   exit 1
 fi
-echo "photon: $live -> $prev"
+echo "$live -> $prev"
 sudo ln -sfn "releases/$prev" current.new
 sudo mv -T current.new current
-sudo systemctl restart parallax
+sudo systemctl restart "$unit"
 REMOTE
 }
 
-rollback_yoyo() {
-  "${SSH[@]}" bash -s <<'REMOTE'
+rollback_single() {
+  "${SSH[@]}" bash -s -- "$TBIN" "$UNIT" <<'REMOTE'
 set -euo pipefail
-[[ -f /usr/local/bin/parallax.prev ]] || { echo "no /usr/local/bin/parallax.prev to roll back to" >&2; exit 1; }
-# The unit passes -state; builds before e847c8e don't know it and won't start.
-if ! /usr/local/bin/parallax.prev -h 2>&1 | grep -q -- '-state'; then
-  echo "parallax.prev predates -state, which the unit passes, so it wouldn't start. Rolling back that far needs the unit changed too (the Homelab session's part)." >&2
+bin=$1 unit=$2
+[[ -f "$bin.prev" ]] || { echo "no $bin.prev to roll back to" >&2; exit 1; }
+if ! "$bin.prev" -h 2>&1 | grep -q -- '-state'; then
+  echo "$bin.prev predates -state, which the unit passes, so it wouldn't start" >&2
   exit 1
 fi
-sudo mv /usr/local/bin/parallax /usr/local/bin/parallax.rolledback
-sudo mv /usr/local/bin/parallax.prev /usr/local/bin/parallax
-sudo mv /usr/local/bin/parallax.rolledback /usr/local/bin/parallax.prev
-sudo systemctl restart parallax
-echo "yoyo: swapped in the previous build (the rolled-back one is now parallax.prev)"
+sudo mv "$bin" "$bin.rolledback"
+sudo mv "$bin.prev" "$bin"
+sudo mv "$bin.rolledback" "$bin.prev"
+sudo systemctl restart "$unit"
+echo "swapped in the previous build (the rolled-back one is now $bin.prev)"
 REMOTE
 }
 
 # Checks: problems are printed and counted; nothing here changes anything.
 checks() {
-  local bad=0
+  local t=$1 bad=0 code
   for _ in $(seq 1 30); do
     "${SSH[@]}" "curl -fs -m 3 $LOCAL/healthz >/dev/null" && break
     sleep 1
   done
-  "${SSH[@]}" "curl -fs -m 3 $LOCAL/healthz >/dev/null" || { echo "PROBLEM: $HOST /healthz fails"; bad=1; }
-  "${SSH[@]}" "systemctl is-active -q $UNIT" || { echo "PROBLEM: $HOST $UNIT is not active"; bad=1; }
-  local code
+  "${SSH[@]}" "curl -fs -m 3 $LOCAL/healthz >/dev/null" || { echo "PROBLEM: $t: /healthz fails on the host"; bad=1; }
+  "${SSH[@]}" "systemctl is-active -q $UNIT" || { echo "PROBLEM: $t: $UNIT is not active"; bad=1; }
   code=$(curl -s -o /dev/null -w '%{http_code}' -m 10 "$URL/healthz" || true)
-  [[ "$code" == 200 ]] || { echo "PROBLEM: $URL/healthz returns $code"; bad=1; }
+  [[ "$code" == 200 ]] || { echo "PROBLEM: $t: /healthz returns $code"; bad=1; }
   code=$(curl -s -o /dev/null -w '%{http_code} %{content_type}' -m 10 "$URL/og.jpg" || true)
-  [[ "$code" == "200 image/jpeg" ]] || { echo "PROBLEM: $URL/og.jpg returns $code"; bad=1; }
+  [[ "$code" == "200 image/jpeg" ]] || { echo "PROBLEM: $t: /og.jpg returns $code"; bad=1; }
+  code=$(curl -s -o /dev/null -w '%{http_code}' -m 10 "$URL/api/demo" || true)
+  [[ "$code" == 200 ]] || { echo "PROBLEM: $t: /api/demo returns $code"; bad=1; }
   code=$(curl -s -o /dev/null -w '%{http_code}' -m 10 "$URL/api/rooms/ZZZZ/replay" || true)
-  [[ "$code" == 404 ]] || { echo "PROBLEM: $URL/api/rooms/ZZZZ/replay returns $code, expected 404"; bad=1; }
-  # What the server said since it started: rooms reopened, the model, errors.
+  [[ "$code" == 404 ]] || { echo "PROBLEM: $t: an unknown room's /replay returns $code, expected 404"; bad=1; }
+  # What the server said lately: rooms reopened, the model's state, errors.
+  # URLs are left out of what's printed.
   "${SSH[@]}" "sudo journalctl -u $UNIT --since '-2min' --no-pager -o cat" |
-    grep -E 'reopened saved rooms|System 1 model|level=ERROR|listening' | tail -5 | sed "s/^/   $HOST: /" || true
+    grep -E 'reopened saved rooms|System 1 model|level=ERROR|listening' | tail -5 |
+    sed -E -e 's/ (url|dir)=[^ ]+//g' -e "s/^/   $t: /" || true
   if ((bad)); then
-    echo "$HOST: checks failed. Roll back with: scripts/deploy.sh $HOST --rollback"
+    echo "$t: checks failed. Roll back with: scripts/deploy.sh $t --rollback"
     return 1
   fi
-  say "$HOST: all checks pass"
+  say "$t: all checks pass"
 }
 
 status=0
-if [[ "$mode" == deploy ]]; then
-  build_binary
-fi
-for h in "${hosts[@]}"; do
-  setup "$h"
+for t in "${hosts[@]}"; do
+  setup "$t"
   case "$mode" in
     deploy)
-      check_unit
-      say "Deploying $COMMIT to $h"
-      ship
-      "install_$h"
+      build_binary
+      check_unit "$t"
+      say "Deploying $COMMIT to $t"
+      ship "$t"
+      "install_$LAYOUT"
       ;;
     rollback)
-      say "Rolling back $h"
-      "rollback_$h"
+      say "Rolling back $t"
+      "rollback_$LAYOUT"
       ;;
   esac
-  checks || status=1
+  checks "$t" || status=1
 done
 exit $status

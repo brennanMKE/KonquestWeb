@@ -7,9 +7,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"io/fs"
 	"log/slog"
+	"net"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/coder/websocket"
@@ -24,12 +27,16 @@ type Options struct {
 	// server on another port.
 	Dev bool
 	// Origins are extra host patterns (path.Match syntax, e.g.
-	// "yoyo.example.ts.net") whose pages may open WebSockets, for proxies
+	// "game.example.ts.net") whose pages may open WebSockets, for proxies
 	// that don't pass the browser's Host header through. The page's own host
 	// is always allowed.
 	Origins []string
 	// Static serves the built frontend at /. Nil serves a placeholder.
 	Static fs.FS
+	// PublicURL is the site's address as players reach it, such as
+	// "https://game.example.com", for the absolute URLs link previews need.
+	// Empty works it out from each request (see publicURL).
+	PublicURL string
 	// Room options for every room.
 	Room   room.Options
 	Logger *slog.Logger
@@ -73,6 +80,7 @@ func New(opts Options) *Server {
 		w.Write([]byte("ok\n"))
 	})
 	if opts.Static != nil {
+		s.mux.HandleFunc("GET /{$}", s.index)
 		s.mux.Handle("GET /", http.FileServerFS(opts.Static))
 	} else {
 		s.mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
@@ -81,6 +89,57 @@ func New(opts Options) *Server {
 		})
 	}
 	return s
+}
+
+// index serves the client's page with {{PUBLIC_URL}} filled in, so link
+// previews point at this server, wherever it runs.
+func (s *Server) index(w http.ResponseWriter, r *http.Request) {
+	b, err := fs.ReadFile(s.opts.Static, "index.html")
+	if err != nil {
+		http.Error(w, "the web client isn't built", http.StatusNotFound)
+		return
+	}
+	page := strings.ReplaceAll(string(b), "{{PUBLIC_URL}}", html.EscapeString(s.publicURL(r)))
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Write([]byte(page))
+}
+
+// publicURL is -public-url, or else the address this request came to:
+// X-Forwarded-Proto and X-Forwarded-Host from a proxy when present, else
+// the Host header. Without a proto header, a proxied public name is assumed
+// to be https (proxies such as Apache don't always say) and a loopback or
+// bare address plain http.
+func (s *Server) publicURL(r *http.Request) string {
+	if s.opts.PublicURL != "" {
+		return strings.TrimRight(s.opts.PublicURL, "/")
+	}
+	host := r.Host
+	if h := r.Header.Get("X-Forwarded-Host"); h != "" {
+		host = strings.TrimSpace(strings.Split(h, ",")[0])
+	}
+	scheme := strings.TrimSpace(strings.Split(r.Header.Get("X-Forwarded-Proto"), ",")[0])
+	switch {
+	case scheme == "http" || scheme == "https":
+	case r.TLS != nil:
+		scheme = "https"
+	case isLocal(host):
+		scheme = "http"
+	default:
+		scheme = "https"
+	}
+	return scheme + "://" + host
+}
+
+// isLocal reports whether host (with or without a port) is loopback or a
+// bare IP address, which won't have a certificate.
+func isLocal(host string) bool {
+	h, _, err := net.SplitHostPort(host)
+	if err != nil {
+		h = host
+	}
+	h = strings.Trim(h, "[]")
+	return h == "localhost" || net.ParseIP(h) != nil
 }
 
 // Rooms is the server's room manager.

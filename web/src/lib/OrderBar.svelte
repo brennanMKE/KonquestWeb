@@ -114,8 +114,9 @@
       case "send": {
         const from = orders.source;
         orders.confirm();
-        // Stay on the same planet if it still has ships to send.
-        browse = from;
+        // The source stays picked while it has ships left: on to its next
+        // destination, from the top of the list. Otherwise browse from it.
+        browse = orders.source === null ? from : null;
         break;
       }
     }

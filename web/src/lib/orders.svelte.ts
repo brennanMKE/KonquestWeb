@@ -94,7 +94,10 @@ class Orders {
       return;
     }
     store.send({ type: "send_fleet", from: this.source, to: this.dest, ships: n });
-    this.cancel();
+    // The source stays picked for the next destination while it has ships
+    // left; picking it again lets it go.
+    this.dest = null;
+    if (n >= max) this.source = null;
   };
 
   endTurn = () => {

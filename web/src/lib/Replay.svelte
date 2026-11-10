@@ -7,6 +7,7 @@
   import { SPECTATOR, playerType, type GameEvent } from "./proto";
   import Board from "./Board.svelte";
   import Standings from "./Standings.svelte";
+  import SoundToggle from "./SoundToggle.svelte";
 
   let { onclose }: { onclose: () => void } = $props();
 
@@ -222,6 +223,7 @@
         <span class="dot" style:background={ownerColor(s.seat)}></span>{store.playerName(s.seat)}
       </span>
     {/each}
+    <SoundToggle />
     {#if downloadHref}
       <a class="download" href={downloadHref} download={downloadName}>Download game</a>
     {/if}

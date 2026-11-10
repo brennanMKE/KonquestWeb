@@ -1,6 +1,7 @@
 <script lang="ts">
   import { load, save, store } from "./store.svelte";
-  import { setSound, soundOn, unlockAudio } from "./audio";
+  import { unlockAudio } from "./audio";
+  import SoundToggle from "./SoundToggle.svelte";
   import { ownerColor } from "./colors";
   import { playerType } from "./proto";
   import { orders } from "./orders.svelte";
@@ -75,12 +76,6 @@
     if (!store.myTurn) orders.cancel();
   });
 
-  let sound = $state(soundOn());
-  function toggleSound() {
-    sound = !sound;
-    setSound(sound);
-  }
-
   // Keyboard: planet letters pick planets. Esc skips the battles (the 3D
   // board handles that), else cancels an order, else leaves the full page.
   function onkey(e: KeyboardEvent) {
@@ -116,9 +111,7 @@
       <span class="timer" class:low={secondsLeft <= 10}>{Math.floor(secondsLeft / 60)}:{String(secondsLeft % 60).padStart(2, "0")}</span>
     {/if}
     <span class="spacer"></span>
-    <button class="small sound" onclick={toggleSound} aria-pressed={sound} title={sound ? "Turn sound off" : "Turn sound on"}>
-      {sound ? "Sound on" : "Sound off"}
-    </button>
+    <SoundToggle />
     {#if store.isHost || store.phase === "over"}
       <a class="save" href="/api/rooms/{store.room}/save?token={store.token}" download>Save game</a>
     {/if}

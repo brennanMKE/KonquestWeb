@@ -16,6 +16,51 @@ let ac: AudioContext | null = null;
 let out: GainNode | null = null;
 let noiseBuf: AudioBuffer | null = null;
 
+// --- Status ------------------------------------------------------------------
+
+/**
+ * What the page knows about sound. It can tell whether the browser lets it
+ * play, not whether anyone hears it (volume, a muted tab, the output device).
+ * - off: the player turned it off
+ * - waiting: no click or key press yet, which browsers require first
+ * - running: the browser is playing what we send
+ * - blocked: a click or key press came, and the browser still won't play
+ * - unsupported: no Web Audio here
+ */
+export type AudioStatus = "off" | "waiting" | "running" | "blocked" | "unsupported";
+
+let unsupported = false;
+let gestured = false;
+let lastError = "";
+const listeners = new Set<(s: AudioStatus) => void>();
+
+export function audioStatus(): AudioStatus {
+  if (!enabled) return "off";
+  if (unsupported) return "unsupported";
+  if (ac?.state === "running") return "running";
+  return gestured ? "blocked" : "waiting";
+}
+
+/** Why sound is blocked, when the browser said. */
+export const audioError = () => lastError;
+
+/** Calls f with the status now and on every change; returns an unsubscribe. */
+export function onAudioStatus(f: (s: AudioStatus) => void): () => void {
+  listeners.add(f);
+  f(audioStatus());
+  return () => listeners.delete(f);
+}
+
+let reported: AudioStatus | null = null;
+function notify() {
+  const s = audioStatus();
+  if (s === reported) return;
+  reported = s;
+  if (s === "blocked") console.warn(`Parallax: the browser isn't playing sound (audio ${ac?.state ?? "not created"})${lastError ? `: ${lastError}` : ""}`);
+  if (s === "unsupported") console.warn(`Parallax: no sound: ${lastError || "this browser has no Web Audio"}`);
+  for (const f of listeners) f(s);
+}
+
 export const soundOn = () => enabled;
 
 export function setSound(on: boolean) {
@@ -27,24 +72,37 @@ export function setSound(on: boolean) {
   }
   if (on) unlockAudio();
   else if (ac?.state === "running") ac.suspend().catch(() => {});
+  notify();
 }
 
 /**
  * Creates or resumes the AudioContext. Browsers keep it suspended until a
- * user gesture, so this runs on the first key press or click.
+ * user gesture, so this runs on the first key press or click. Resolves once
+ * the browser has answered, with the status then.
  */
-export function unlockAudio() {
-  if (!enabled) return;
+export function unlockAudio(e?: Event | "retry"): Promise<AudioStatus> {
+  if (!enabled) return Promise.resolve(audioStatus());
+  // Only a click or key press counts toward "blocked": not a sound retrying,
+  // not a tab coming back.
+  if (e !== "retry" && e?.type !== "visibilitychange") gestured = true;
   // A closed context can't come back; start a new one.
   if (ac?.state === "closed") ac = null;
   if (!ac) {
     const AC = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-    if (!AC) return;
+    if (!AC) {
+      unsupported = true;
+      notify();
+      return Promise.resolve(audioStatus());
+    }
     try {
       ac = new AC();
-    } catch {
-      return;
+    } catch (err) {
+      unsupported = true;
+      lastError = `couldn't start audio: ${(err as Error).message}`;
+      notify();
+      return Promise.resolve(audioStatus());
     }
+    ac.addEventListener("statechange", notify);
     const comp = ac.createDynamicsCompressor();
     comp.connect(ac.destination);
     out = ac.createGain();
@@ -55,15 +113,38 @@ export function unlockAudio() {
     for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
   }
   // Suspended, or "interrupted" (Safari, after sleep or an output device
-  // change): resume. Anything but running needs it.
-  if (ac.state !== "running") ac.resume().catch(() => {});
+  // change): resume. Anything but running needs it. Some browsers never
+  // settle the promise when they refuse, so don't wait more than a second.
+  if (ac.state === "running") {
+    notify();
+    return Promise.resolve(audioStatus());
+  }
+  const ctx = ac;
+  return Promise.race([
+    ctx.resume().then(
+      () => (lastError = ""),
+      (err: Error) => (lastError = err.message),
+    ),
+    new Promise((r) => setTimeout(r, 1000)),
+  ]).then(() => {
+    notify();
+    return audioStatus();
+  });
+}
+
+/** Turns sound on if need be and plays a short tone, to check it's heard. */
+export async function testSound(): Promise<AudioStatus> {
+  if (!enabled) setSound(true);
+  const s = await unlockAudio();
+  if (s === "running") play("turn");
+  return s;
 }
 
 // Browsers suspend audio in a hidden tab or across sleep. Coming back to
 // the tab resumes it, once a gesture has allowed sound at all.
 if (typeof document !== "undefined") {
   document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "visible" && ac && enabled) unlockAudio();
+    if (document.visibilityState === "visible" && ac && enabled) unlockAudio(new Event("visibilitychange"));
   });
   // iOS Safari doesn't count pointerdown (a touch starting) as a gesture
   // that may start audio; touchend and click are. Listen on every page,
@@ -244,7 +325,7 @@ export function play(...names: Sound[]) {
   if (ac.state !== "running") {
     // Try to wake it (this works once a gesture has unlocked it before);
     // this sound is skipped, the next ones play.
-    unlockAudio();
+    unlockAudio("retry");
     return;
   }
   const list = [...new Set(names)].sort((a, b) => PRIORITY.indexOf(a) - PRIORITY.indexOf(b));

@@ -1,7 +1,7 @@
 // Client state and the WebSocket connection. The server is authoritative:
 // this only records what the server says and sends intents.
 
-import type { ClientMsg, GameEvent, Phase, PlanetView, SeatInfo, ServerMsg, Settings, Standing, View } from "./proto";
+import type { ClientMsg, GameEvent, Phase, PlanetView, Replay, SeatInfo, ServerMsg, Settings, Standing, View } from "./proto";
 import { NEUTRAL, SPECTATOR } from "./proto";
 import { play, type Sound } from "./audio";
 import { factionOf, planetName } from "./names";
@@ -97,6 +97,37 @@ class Store {
     const f = this.afterReplay;
     this.afterReplay = null;
     f?.();
+  }
+
+  /** A whole game being watched back, over everything else. */
+  replay = $state<Replay | null>(null);
+
+  /**
+   * Opens a replay. Outside a room it also takes the replay's room and
+   * seats, so players and planets get the names they had in the game.
+   */
+  openReplay(r: Replay) {
+    if (!this.joined) {
+      this.room = r.room || "REPLAY";
+      this.seats = r.seats.map((s, seat) => ({ ...s, seat, connected: true }));
+    }
+    // Planets are named by their holder, as in the game.
+    const frames = r.frames.map((f) => ({ ...f, view: this.named(f.view) }));
+    this.replay = { ...r, frames };
+  }
+
+  /** Fetches and opens a finished room's replay; reports failure. */
+  async watchReplay(room: string): Promise<boolean> {
+    try {
+      const res = await fetch(`/api/rooms/${encodeURIComponent(room)}/replay`);
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error ?? `server said ${res.status}`);
+      this.openReplay(body as Replay);
+      return true;
+    } catch (e) {
+      this.showToast(`Couldn't load the replay: ${(e as Error).message}`);
+      return false;
+    }
   }
 
   private ws: WebSocket | null = null;
@@ -333,46 +364,46 @@ class Store {
   }
 
   private addEvent(e: GameEvent) {
+    const d = this.describe(e, this.seat);
+    if (d) this.addLog(e.round, d.text, d.tone);
+  }
+
+  /** An event as a log line, from seat's side of it. */
+  describe(e: GameEvent, me: number): { text: string; tone: LogEntry["tone"] } | null {
     // A planet is named by whoever held it when the event happened.
     const planet = e.planet >= 0 ? this.planetNameFor(e.planet, e.defender) : "";
-    const me = this.seat;
+    const who = (seat: number) => (seat === NEUTRAL ? "neutral" : seat === me ? "you" : this.playerName(seat));
     switch (e.kind) {
       case "reinforced":
-        this.addLog(e.round, `Reinforcements have arrived at ${planet}: ${e.ships} ships, now ${e.remaining}.`, "info");
-        break;
+        return { text: `Reinforcements have arrived at ${planet}: ${e.ships} ships, now ${e.remaining}.`, tone: "info" };
       case "captured":
         if (e.attacker === me) {
-          this.addLog(
-            e.round,
-            `${planet} has fallen to you (from ${this.seatName(e.defender)}) and is now ${this.planetNameFor(e.planet, e.attacker)}. ${e.remaining} of ${e.ships} ships survived.`,
-            "good",
-          );
-        } else {
-          this.addLog(
-            e.round,
-            `${planet} has fallen to ${this.seatName(e.attacker)} and is now ${this.planetNameFor(e.planet, e.attacker)}.`,
-            "bad",
-          );
+          return {
+            text: `${planet} has fallen to you (from ${who(e.defender)}) and is now ${this.planetNameFor(e.planet, e.attacker)}. ${e.remaining} of ${e.ships} ships survived.`,
+            tone: "good",
+          };
         }
-        break;
+        return {
+          text: `${planet} has fallen to ${who(e.attacker)}${me === SPECTATOR ? ` (from ${who(e.defender)})` : ""} and is now ${this.planetNameFor(e.planet, e.attacker)}.`,
+          tone: me === SPECTATOR ? "info" : "bad",
+        };
       case "held":
         if (e.attacker === me) {
-          this.addLog(e.round, `${planet} has held against your attack: ${e.ships} ships lost, ${e.defenderLost} defenders destroyed.`, "bad");
-        } else {
-          this.addLog(
-            e.round,
-            `${planet} has held against an attack from ${this.seatName(e.attacker)}: ${e.ships} attackers destroyed, ${e.remaining} defenders left.`,
-            "good",
-          );
+          return { text: `${planet} has held against your attack: ${e.ships} ships lost, ${e.defenderLost} defenders destroyed.`, tone: "bad" };
         }
-        break;
+        return {
+          text: `${planet}${me === SPECTATOR ? ` (${who(e.defender)})` : ""} has held against an attack from ${who(e.attacker)}: ${e.ships} attackers destroyed, ${e.remaining} defenders left.`,
+          tone: me === SPECTATOR ? "info" : "good",
+        };
       case "eliminated":
-        this.addLog(e.round, e.attacker === me ? "You have been eliminated." : `${this.seatName(e.attacker)} has been eliminated.`, e.attacker === me ? "bad" : "info");
-        break;
+        return { text: e.attacker === me ? "You have been eliminated." : `${who(e.attacker)} has been eliminated.`, tone: e.attacker === me ? "bad" : "info" };
       case "game_over":
-        this.addLog(e.round, e.attacker < 0 ? "The game is over. No winner." : `The game is over. ${e.attacker === me ? "You win!" : this.seatName(e.attacker) + " wins."}`);
-        break;
+        return {
+          text: e.attacker < 0 ? "The game is over. No winner." : `The game is over. ${e.attacker === me ? "You win!" : who(e.attacker) + " wins."}`,
+          tone: "info",
+        };
     }
+    return null;
   }
 }
 

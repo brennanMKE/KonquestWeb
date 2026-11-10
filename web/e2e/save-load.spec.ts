@@ -24,7 +24,7 @@ test("the host saves a game and loads it into a new room", async ({ page }) => {
 
   await page.goto("/");
   await page.getByLabel("Your name").fill("Alice");
-  await page.locator('input[type="file"]').setInputFiles(file);
+  await page.locator("label", { hasText: "Load a saved game" }).locator("input").setInputFiles(file);
   await expect(page.getByText("Your turn")).toBeVisible();
   await expect(page.getByText("Round 4", { exact: false }).first()).toBeVisible();
   expect(new URL(page.url()).searchParams.get("room")).not.toBe(room);

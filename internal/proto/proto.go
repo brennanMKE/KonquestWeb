@@ -267,6 +267,9 @@ const SaveVersion = 1
 type SaveFile struct {
 	Version int    `json:"version"`
 	Seed    uint64 `json:"seed"`
+	// Room is the room code the game was played in. Faction and planet
+	// names come from it, so a replay names things as the players saw them.
+	Room string `json:"room,omitempty"`
 	// Round is the round the game was saved in, for information only.
 	Round    int            `json:"round"`
 	Settings Settings       `json:"settings"`
@@ -279,4 +282,31 @@ type SavedSeat struct {
 	Name   string `json:"name"`
 	Kind   string `json:"kind"`
 	AIKind string `json:"aiKind,omitempty"`
+}
+
+// Replay is a whole game for watching back: who played, and the full map
+// after every round.
+type Replay struct {
+	Room     string        `json:"room"`
+	Settings Settings      `json:"settings"`
+	Seats    []SavedSeat   `json:"seats"`
+	Frames   []rules.Frame `json:"frames"`
+	Over     bool          `json:"over"`
+	Winner   int           `json:"winner"`
+}
+
+// BuildReplay replays a game file into its frames.
+func BuildReplay(f *SaveFile) (*Replay, error) {
+	if f.Version != SaveVersion {
+		return nil, fmt.Errorf("unsupported save version %d", f.Version)
+	}
+	if len(f.Seats) == 0 {
+		return nil, errors.New("the game file has no seats")
+	}
+	frames, err := rules.Timeline(len(f.Seats), f.Settings.Settings, f.Seed, f.Actions)
+	if err != nil {
+		return nil, fmt.Errorf("replaying the game: %w", err)
+	}
+	last := frames[len(frames)-1].View
+	return &Replay{Room: f.Room, Settings: f.Settings, Seats: f.Seats, Frames: frames, Over: last.Over, Winner: last.Winner}, nil
 }

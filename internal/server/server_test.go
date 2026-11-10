@@ -232,6 +232,10 @@ func TestSaveAndLoad(t *testing.T) {
 	if resp, _ := http.Get(saveURL + bobToken); resp.StatusCode != http.StatusForbidden {
 		t.Fatalf("save by non-host: %d", resp.StatusCode)
 	}
+	// A running game can't be watched back: it would show every order.
+	if resp, _ := http.Get(ts.URL + "/api/rooms/" + code + "/replay"); resp.StatusCode != http.StatusConflict {
+		t.Fatalf("replay of a running game: %d", resp.StatusCode)
+	}
 	resp, err := http.Get(saveURL + token)
 	if err != nil || resp.StatusCode != http.StatusOK {
 		t.Fatalf("save: %v %v", resp, err)
@@ -246,7 +250,23 @@ func TestSaveAndLoad(t *testing.T) {
 		t.Fatalf("save file: %+v", f)
 	}
 
+	if f.Room != code {
+		t.Errorf("save file room %q, want %q", f.Room, code)
+	}
+
 	body, _ := json.Marshal(f)
+	// The file plays back without opening a room: the start and two rounds.
+	resp, err = http.Post(ts.URL+"/api/replay", "application/json", strings.NewReader(string(body)))
+	if err != nil || resp.StatusCode != http.StatusOK {
+		t.Fatalf("file replay: %v %v", resp, err)
+	}
+	var rp proto.Replay
+	json.NewDecoder(resp.Body).Decode(&rp)
+	resp.Body.Close()
+	if len(rp.Frames) != 3 || rp.Room != code || len(rp.Seats) != 3 || rp.Over || len(rp.Frames[1].Launched) != 1 {
+		t.Fatalf("file replay: %d frames, room %q, over %v", len(rp.Frames), rp.Room, rp.Over)
+	}
+
 	resp, err = http.Post(ts.URL+"/api/load", "application/json", strings.NewReader(string(body)))
 	if err != nil || resp.StatusCode != http.StatusCreated {
 		t.Fatalf("load: %v %v", resp, err)
@@ -284,6 +304,48 @@ func TestSaveAndLoad(t *testing.T) {
 	eve.send(&proto.Join{Name: "Eve"})
 	if e := expect[proto.Error](eve); e.Code != proto.ErrWrongPhase {
 		t.Fatalf("eve: %+v", e)
+	}
+}
+
+func TestFinishedReplay(t *testing.T) {
+	ts := newServer(t)
+	code := createRoom(t, ts)
+	alice := dial(t, ts, code)
+	alice.send(&proto.Join{Name: "Alice"})
+	expect[proto.Welcome](alice)
+	s := proto.DefaultSettings()
+	s.AIDelayMs = 0
+	s.MaxRounds = 2
+	alice.send(&proto.SetSettings{Settings: s})
+	alice.send(&proto.AddAI{})
+	alice.send(&proto.StartGame{})
+	for range 2 {
+		expect[proto.YourTurn](alice)
+		alice.send(&proto.EndTurn{})
+	}
+	over := expect[proto.GameOver](alice)
+
+	// Anyone with the code may watch a finished game, with no token.
+	resp, err := http.Get(ts.URL + "/api/rooms/" + code + "/replay")
+	if err != nil || resp.StatusCode != http.StatusOK {
+		t.Fatalf("replay: %v %v", resp, err)
+	}
+	var rp proto.Replay
+	json.NewDecoder(resp.Body).Decode(&rp)
+	resp.Body.Close()
+	if len(rp.Frames) != 3 || !rp.Over || rp.Winner != over.Winner || rp.Seats[0].Name != "Alice" {
+		t.Fatalf("replay: %d frames, over %v, winner %d", len(rp.Frames), rp.Over, rp.Winner)
+	}
+	if resp, _ := http.Get(ts.URL + "/api/rooms/ZZZZ/replay"); resp.StatusCode != http.StatusNotFound {
+		t.Errorf("replay of no room: %d", resp.StatusCode)
+	}
+	// Once it's over, anyone may save the file too.
+	if resp, _ := http.Get(ts.URL + "/api/rooms/" + code + "/save"); resp.StatusCode != http.StatusOK {
+		t.Errorf("save of a finished game: %d", resp.StatusCode)
+	}
+	resp, _ = http.Post(ts.URL+"/api/replay", "application/json", strings.NewReader(`{"version": 1, "seats": []}`))
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("replay of an empty file: %d", resp.StatusCode)
 	}
 }
 

@@ -966,27 +966,48 @@ func (r *Room) openSeat(name string) *seat {
 
 // Save returns the game file for a started game: seed, settings, seats and
 // the actions log. It asks the room goroutine and waits. Only the host's
-// token may save, because the log reveals every player's orders.
+// token may save while the game runs, because the log reveals every
+// player's orders; once it is over anyone may.
 func (r *Room) Save(token string) (*proto.SaveFile, error) {
+	return r.saveFile(func() error {
+		if r.phase == proto.PhaseOver || (r.host != nil && token != "" && r.host.token == token) {
+			return nil
+		}
+		return ErrNotHost
+	})
+}
+
+// Finished returns the game file of a finished game, for anyone to watch.
+func (r *Room) Finished() (*proto.SaveFile, error) {
+	return r.saveFile(func() error {
+		if r.phase != proto.PhaseOver {
+			return ErrNotOver
+		}
+		return nil
+	})
+}
+
+func (r *Room) saveFile(allowed func() error) (*proto.SaveFile, error) {
 	type result struct {
 		f   *proto.SaveFile
 		err error
 	}
 	ch := make(chan result, 1)
 	if !r.post(func() {
-		switch {
-		case r.host == nil || token == "" || r.host.token != token:
-			ch <- result{err: ErrNotHost}
-		case r.game == nil:
+		if r.game == nil {
 			ch <- result{err: ErrNoGame}
-		default:
-			f := &proto.SaveFile{Version: proto.SaveVersion, Seed: r.game.Seed(), Round: r.game.Round(),
-				Settings: r.settings, Actions: r.game.Actions()}
-			for _, s := range r.seats {
-				f.Seats = append(f.Seats, proto.SavedSeat{Name: s.name, Kind: s.kind, AIKind: s.aiKind})
-			}
-			ch <- result{f: f}
+			return
 		}
+		if err := allowed(); err != nil {
+			ch <- result{err: err}
+			return
+		}
+		f := &proto.SaveFile{Version: proto.SaveVersion, Seed: r.game.Seed(), Room: r.code, Round: r.game.Round(),
+			Settings: r.settings, Actions: r.game.Actions()}
+		for _, s := range r.seats {
+			f.Seats = append(f.Seats, proto.SavedSeat{Name: s.name, Kind: s.kind, AIKind: s.aiKind})
+		}
+		ch <- result{f: f}
 	}) {
 		return nil, ErrNoRoom
 	}
@@ -998,6 +1019,7 @@ func (r *Room) Save(token string) (*proto.SaveFile, error) {
 var (
 	ErrNotHost = errors.New("only the host can save the game")
 	ErrNoGame  = errors.New("the game hasn't started")
+	ErrNotOver = errors.New("the game isn't over yet")
 )
 
 // load sets up a new, not yet running room from a game file: the game is

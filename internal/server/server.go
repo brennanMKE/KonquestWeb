@@ -62,7 +62,9 @@ func New(opts Options) *Server {
 	s.mux.HandleFunc("POST /api/rooms", s.createRoom)
 	s.mux.HandleFunc("GET /api/rooms/{code}", s.getRoom)
 	s.mux.HandleFunc("GET /api/rooms/{code}/save", s.saveRoom)
+	s.mux.HandleFunc("GET /api/rooms/{code}/replay", s.roomReplay)
 	s.mux.HandleFunc("POST /api/load", s.loadRoom)
+	s.mux.HandleFunc("POST /api/replay", s.fileReplay)
 	s.mux.HandleFunc("GET /ws", s.websocket)
 	s.mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
@@ -125,6 +127,40 @@ func (s *Server) saveRoom(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="parallax-%s-round-%d.json"`,
 		rm.Code(), f.Round))
 	writeJSON(w, http.StatusOK, f)
+}
+
+// roomReplay sends a finished game's every round, for watching it back.
+func (s *Server) roomReplay(w http.ResponseWriter, r *http.Request) {
+	rm, ok := s.rooms.Get(r.PathValue("code"))
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "no such room"})
+		return
+	}
+	f, err := rm.Finished()
+	if err != nil {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
+		return
+	}
+	s.sendReplay(w, f)
+}
+
+// fileReplay sends the rounds of a game file, without opening a room.
+func (s *Server) fileReplay(w http.ResponseWriter, r *http.Request) {
+	var f proto.SaveFile
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<20)).Decode(&f); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "not a game file: " + err.Error()})
+		return
+	}
+	s.sendReplay(w, &f)
+}
+
+func (s *Server) sendReplay(w http.ResponseWriter, f *proto.SaveFile) {
+	rp, err := proto.BuildReplay(f)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, rp)
 }
 
 // loadRoom starts a new room from a game file and returns its code.

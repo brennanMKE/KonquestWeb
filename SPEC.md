@@ -181,7 +181,9 @@ Server to client:
 
 HTTP: `POST /api/rooms` creates a room and returns `{code}`; `GET /api/rooms/{code}` checks that a room exists. Rooms close after 10 minutes with no human connected.
 
-Save and load: `GET /api/rooms/{code}/save?token=HOST_TOKEN` downloads `{version, seed, round, settings, seats, actions}` (host only, since the actions log reveals every player's orders). `POST /api/load` with that file replays it into a new room and returns `{code}`. Human seats start unclaimed; a player joining without a token takes the seat with their name, or the first free one. The first human seat is the host.
+Save and load: `GET /api/rooms/{code}/save?token=HOST_TOKEN` downloads `{version, seed, room, round, settings, seats, actions}` (host only while the game runs, since the actions log reveals every player's orders; anyone once it is over). `POST /api/load` with that file replays it into a new room and returns `{code}`. Human seats start unclaimed; a player joining without a token takes the seat with their name, or the first free one. The first human seat is the host.
+
+Replays: `GET /api/rooms/{code}/replay` (finished games only, no token) and `POST /api/replay` with a game file both return `{room, settings, seats, frames, over, winner}`. Frame 0 is the map before anyone moves; each later frame is one resolved round: `{round, launched, events, view, standings}`, where `view` is the full spectator view (every planet's stats and every fleet). The client opens it from the score card ("Watch replay"), from a `/?replay=CODE` link, or from "Watch a saved game" on the start page, and steps or autoplays through the rounds, animating each round's battles in 3D.
 
 Validate every client message on the server: it's the sender's turn, they own the source planet, they have enough ships, the game is in the right phase, and host-only actions come from the host.
 

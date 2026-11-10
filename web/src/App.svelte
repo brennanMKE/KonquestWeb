@@ -3,9 +3,19 @@
   import Landing from "./lib/Landing.svelte";
   import Lobby from "./lib/Lobby.svelte";
   import Game from "./lib/Game.svelte";
+  import Replay from "./lib/Replay.svelte";
 
   const params = new URLSearchParams(location.search);
   const startRoom = (params.get("room") ?? "").toUpperCase();
+  // /?replay=ABCD watches a finished room's game back.
+  const replayRoom = (params.get("replay") ?? "").toUpperCase();
+  let replayFailed = $state(false);
+  if (replayRoom) store.watchReplay(replayRoom).then((ok) => (replayFailed = !ok));
+
+  function closeReplay() {
+    if (store.joined) store.replay = null;
+    else location.href = "/";
+  }
   let room = $state(startRoom);
   let entered = $state(false);
 
@@ -20,7 +30,18 @@
   if (startRoom && hasSeat(startRoom)) enter(startRoom, load(nameKey));
 </script>
 
-{#if !entered}
+{#if store.replay}
+  <Replay onclose={closeReplay} />
+{:else if replayRoom && !entered}
+  <main class="message">
+    {#if replayFailed}
+      <p>There's no finished game to watch in room {replayRoom}. Rooms close 10 minutes after everyone leaves.</p>
+      <a href="/">Back to the start</a>
+    {:else}
+      <p class="muted">Loading the replay of room {replayRoom}…</p>
+    {/if}
+  </main>
+{:else if !entered}
   <Landing {room} onenter={enter} />
 {:else if store.fatal}
   <main class="message">

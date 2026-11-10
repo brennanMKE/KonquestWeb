@@ -390,7 +390,7 @@
 
   // While a battle plays, a planet shows its owner from before it.
   let shownOwner = $state(new Map<number, number>());
-  let replayed = -1;
+  let replayed: unknown = null;
   let replaying = $state(false);
   let skip = false;
   const fx = new THREE.Group();
@@ -407,9 +407,11 @@
   // The scene is set up asynchronously; a round that arrived before it was
   // ready still replays once it is.
   let ready = $state(false);
+  // A round replays when a new replay object arrives, so a replay viewer can
+  // show the same round again after stepping back.
   $effect(() => {
-    if (replay && replay.round !== replayed && ready) {
-      replayed = replay.round;
+    if (replay && replay !== replayed && ready) {
+      replayed = replay;
       noteInput();
       queue.push(replay);
       if (replaying) skip = true;

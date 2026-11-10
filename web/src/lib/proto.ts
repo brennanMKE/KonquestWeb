@@ -93,6 +93,31 @@ export interface Standing {
   stats: Stats;
 }
 
+/** The whole game after one round, for watching it back. */
+export interface Frame {
+  round: number;
+  launched: Fleet[];
+  events: GameEvent[];
+  view: View;
+  standings: Standing[];
+}
+
+export interface SavedSeat {
+  name: string;
+  kind: "human" | "ai";
+  aiKind?: string;
+}
+
+/** A whole game: frame 0 is the start, then one frame per round. */
+export interface Replay {
+  room: string;
+  settings: Settings;
+  seats: SavedSeat[];
+  frames: Frame[];
+  over: boolean;
+  winner: number;
+}
+
 export interface SeatInfo {
   seat: number;
   name: string;

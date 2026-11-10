@@ -116,7 +116,7 @@
     <button class="small sound" onclick={toggleSound} aria-pressed={sound} title={sound ? "Turn sound off" : "Turn sound on"}>
       {sound ? "Sound on" : "Sound off"}
     </button>
-    {#if store.isHost}
+    {#if store.isHost || store.phase === "over"}
       <a class="save" href="/api/rooms/{store.room}/save?token={store.token}" download>Save game</a>
     {/if}
     {#if store.conn !== "open"}<span class="badge warn">Reconnecting…</span>{/if}
@@ -230,6 +230,7 @@
           {:else}
             <span class="muted">Waiting for the host to start another game.</span>
           {/if}
+          <button onclick={() => store.watchReplay(store.room)} title="Watch the whole game back, round by round, with nothing hidden">Watch replay</button>
           <button onclick={() => store.leave()} title="Go to the start page to create or join another room">New room</button>
           <button onclick={() => (store.standings = null)}>Back to the map</button>
         </div>

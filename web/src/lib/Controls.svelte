@@ -81,6 +81,7 @@
         {:else}
           <p class="hint">Waiting for the host to start another game.</p>
         {/if}
+        <button onclick={() => store.watchReplay(store.room)} title="Watch the whole game back, round by round, with nothing hidden">Watch replay</button>
         <button onclick={() => store.leave()} title="Go to the start page to create or join another room">New room</button>
       </div>
     {:else if store.watching}

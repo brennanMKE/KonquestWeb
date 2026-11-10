@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { load, nameKey, save } from "./store.svelte";
+  import { load, nameKey, save, store } from "./store.svelte";
 
   interface Props {
     room?: string;
@@ -52,6 +52,23 @@
     }
   }
 
+  async function watchFile(e: Event) {
+    const file = (e.currentTarget as HTMLInputElement).files?.[0];
+    if (!file) return;
+    busy = true;
+    error = "";
+    try {
+      const res = await fetch("/api/replay", { method: "POST", body: await file.text() });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error ?? `server said ${res.status}`);
+      store.openReplay(body);
+    } catch (e) {
+      error = `Couldn't play that game back: ${(e as Error).message}`;
+    } finally {
+      busy = false;
+    }
+  }
+
   async function join(e: SubmitEvent) {
     e.preventDefault();
     const c = code.trim().toUpperCase();
@@ -97,6 +114,10 @@
     <label class="load">
       <input type="file" accept=".json,application/json" onchange={loadFile} disabled={busy} />
       <span>Load a saved game…</span>
+    </label>
+    <label class="load">
+      <input type="file" accept=".json,application/json" onchange={watchFile} disabled={busy} />
+      <span>Watch a saved game…</span>
     </label>
   {/if}
 

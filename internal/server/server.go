@@ -48,6 +48,7 @@ type Server struct {
 	log   *slog.Logger
 	rooms *room.Manager
 	mux   *http.ServeMux
+	demos demoCache
 }
 
 // New returns a server.
@@ -65,6 +66,7 @@ func New(opts Options) *Server {
 	s.mux.HandleFunc("GET /api/rooms/{code}/replay", s.roomReplay)
 	s.mux.HandleFunc("POST /api/load", s.loadRoom)
 	s.mux.HandleFunc("POST /api/replay", s.fileReplay)
+	s.mux.HandleFunc("GET /api/demo", s.demo)
 	s.mux.HandleFunc("GET /ws", s.websocket)
 	s.mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")

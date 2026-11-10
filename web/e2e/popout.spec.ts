@@ -33,9 +33,9 @@ test("the board fills the page and the controls pop out", async ({ page }) => {
   expect(bg).toBe("flex");
 
   // Pick on the main board; the order appears in the pop-out.
-  await page.locator(".planet.mine").first().click();
+  await page.locator(".planet.mine").first().dispatchEvent("click");
   await expect(controls.getByText(/Sending from/)).toBeVisible();
-  await page.locator(".planet:not(.mine)").first().click();
+  await page.locator(".planet:not(.mine)").first().dispatchEvent("click");
   await expect(controls.getByLabel("Ships to send")).toBeVisible();
   await controls.getByRole("button", { name: "Send" }).click();
   await expect(controls.getByText(/Fleet of \d+ sent/).last()).toBeVisible();

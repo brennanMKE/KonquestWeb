@@ -28,6 +28,11 @@
     replay?: { round: number; events: GameEvent[] } | null;
     /** Called when a round's replay has finished (or had nothing to show). */
     onreplaydone?: (round: number) => void;
+    /**
+     * Scenery, as behind the start page: no controls, labels, input or
+     * sound, and the camera slowly turns the map from the start.
+     */
+    ambient?: boolean;
   }
 
   let {
@@ -45,7 +50,13 @@
     onhover,
     replay = null,
     onreplaydone,
+    ambient = false,
   }: Props = $props();
+
+  // Scenery makes no sound.
+  const sfx = (...s: Parameters<typeof play>) => {
+    if (!ambient) play(...s);
+  };
 
   // A shallow map spreads its few layers apart so height reads clearly; a
   // cube keeps cells cubic.
@@ -450,7 +461,7 @@
     );
     const battles = all.filter((e) => chosen.has(e));
     if (!battles.length) {
-      play(...events.map((e) => soundFor(e, seat)).filter((s) => s !== null));
+      sfx(...events.map((e) => soundFor(e, seat)).filter((s) => s !== null));
       return false;
     }
     skip = false;
@@ -461,7 +472,8 @@
     shownOwner = before;
     // One camera move for the whole round: frame every battle, then play
     // them in place, in the order they happened.
-    if (autoCamera) await frameAll([...new Set(battles.map((e) => e.planet))]);
+    // Scenery keeps turning instead.
+    if (autoCamera && !ambient) await frameAll([...new Set(battles.map((e) => e.planet))]);
     for (const e of battles) {
       if (skip) break;
       await battle(e);
@@ -470,10 +482,10 @@
     for (const a of anims) a(Infinity);
     anims = [];
     if (skip) {
-      play(...events.map((e) => soundFor(e, seat)).filter((s) => s !== null));
+      sfx(...events.map((e) => soundFor(e, seat)).filter((s) => s !== null));
       skip = false;
     }
-    return autoCamera; // only an auto camera moved
+    return autoCamera && !ambient; // only an auto camera moved
   }
 
   const involves = (e: GameEvent) => e.attacker === seat || e.defender === seat || seat === -2;
@@ -511,7 +523,7 @@
     const flashes = Math.min(12, Math.max(3, Math.round(Math.sqrt(e.attackerLost + e.defenderLost) * 2)));
     for (let i = 0; i < flashes && !skip; i++) {
       flash(at.clone().add(new THREE.Vector3().randomDirection().multiplyScalar(0.6 * unit)), i % 2 ? 0xffd27a : 0xffffff);
-      play(i % 3 === 2 ? "boom" : "shot");
+      sfx(i % 3 === 2 ? "boom" : "shot");
       await wait(110);
     }
 
@@ -519,7 +531,7 @@
     if (e.kind === "captured") shownOwner = new Map(shownOwner).set(e.planet, e.attacker);
     ring(at, new THREE.Color(ownerHex(e.kind === "captured" ? e.attacker : e.defender)));
     const s = soundFor(e, seat);
-    if (s) play(s);
+    if (s) sfx(s);
     await wait(700);
     cone.dispose();
     mat.dispose();
@@ -572,7 +584,13 @@
 
   // Auto camera: the view backs out and turns in a lull, and swings to each
   // round's battles. Off, the camera moves only when the player moves it.
-  let autoCamera = $state(load("parallax.autocam") !== "off");
+  // svelte-ignore state_referenced_locally
+  // Scenery turns unless the viewer prefers less motion.
+  let autoCamera = $state(
+    ambient
+      ? !(typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches)
+      : load("parallax.autocam") !== "off",
+  );
   function toggleAutoCamera() {
     autoCamera = !autoCamera;
     save("parallax.autocam", autoCamera ? "on" : "off");
@@ -582,13 +600,16 @@
   // In a lull (no input, no replay, no order being entered) the camera backs
   // out to show the whole map and slowly turns it. Any input stops it where
   // it is.
-  const idleAfterMs = 10_000;
+  // svelte-ignore state_referenced_locally
+  const idleAfterMs = ambient ? 0 : 10_000;
   const driftRadPerSec = 0.12;
   let lastInput = performance.now();
   let idling = false;
   const yAxis = new THREE.Vector3(0, 1, 0);
 
   function noteInput() {
+    // Scenery takes no input; typing on the page mustn't stop its drift.
+    if (ambient) return;
     lastInput = performance.now();
     if (idling) {
       idling = false;
@@ -598,7 +619,7 @@
   }
 
   function stepIdle(now: number, dt: number) {
-    const lull = autoCamera && !replaying && source === null && dest === null && now - lastInput > idleAfterMs;
+    const lull = autoCamera && (!replaying || ambient) && source === null && dest === null && now - lastInput > idleAfterMs;
     if (!lull) return false;
     if (!idling) {
       idling = true;
@@ -679,7 +700,7 @@
     };
     const onKey = (e: KeyboardEvent) => {
       noteInput();
-      if (e.key === "Escape") skipReplay();
+      if (e.key === "Escape" && !ambient) skipReplay();
     };
     window.addEventListener("keydown", onKey);
     const onWheel = () => noteInput();
@@ -757,8 +778,8 @@
   });
 </script>
 
-<div class="board3d" bind:this={host} data-testid="board-3d" data-replayed={doneRound} data-battles={replaying ? "playing" : "idle"}>
-  {#if webgl}
+<div class="board3d" class:ambient bind:this={host} aria-hidden={ambient || undefined} data-testid="board-3d" data-replayed={doneRound} data-battles={replaying ? "playing" : "idle"}>
+  {#if webgl && !ambient}
     <div class="views" role="toolbar" aria-label="Camera">
       {#each Object.keys(presets) as name (name)}
         <button class="small" onclick={() => viewFrom(name)} title="View the map from the {name.toLowerCase()}">{name}</button>
@@ -785,15 +806,17 @@
     </div>
     <p class="hint">Drag to turn · scroll to zoom · right-drag to pan</p>
   {/if}
-  {#if !webgl}
+  {#if !webgl && !ambient}
     <p class="muted">This browser can't show the 3D view. Switch back to the map view.</p>
   {/if}
-  <!-- Planets as buttons for keyboard and screen-reader users. -->
-  <ul class="sr-only" aria-label="Planets">
-    {#each planets as p (p.id)}
-      <li><button class:mine={p.owner === seat} aria-label="Planet {p.name}" onclick={() => onpick?.(p.id)}></button></li>
-    {/each}
-  </ul>
+  {#if !ambient}
+    <!-- Planets as buttons for keyboard and screen-reader users. -->
+    <ul class="sr-only" aria-label="Planets">
+      {#each planets as p (p.id)}
+        <li><button class:mine={p.owner === seat} aria-label="Planet {p.name}" onclick={() => onpick?.(p.id)}></button></li>
+      {/each}
+    </ul>
+  {/if}
 </div>
 
 <style>
@@ -860,6 +883,13 @@
     font-size: 11px;
     color: var(--muted);
     pointer-events: none;
+  }
+  /* Scenery: nothing to read or touch. */
+  .board3d.ambient {
+    pointer-events: none;
+  }
+  .board3d.ambient :global(.labels) {
+    display: none;
   }
   .sr-only {
     position: absolute;

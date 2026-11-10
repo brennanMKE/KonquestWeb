@@ -407,3 +407,33 @@ func TestOrigins(t *testing.T) {
 		t.Fatal("an unlisted origin connected")
 	}
 }
+
+func TestDemo(t *testing.T) {
+	ts := newServer(t)
+	get := func() proto.Replay {
+		resp, err := http.Get(ts.URL + "/api/demo")
+		if err != nil || resp.StatusCode != http.StatusOK {
+			t.Fatalf("demo: %v %v", resp, err)
+		}
+		defer resp.Body.Close()
+		var rp proto.Replay
+		json.NewDecoder(resp.Body).Decode(&rp)
+		return rp
+	}
+	a := get()
+	if len(a.Seats) != demoPlayers || len(a.Frames) < 10 || len(a.Room) != 4 || a.Settings.Depth <= 1 {
+		t.Fatalf("demo: %d seats, %d frames, room %q, depth %d", len(a.Seats), len(a.Frames), a.Room, a.Settings.Depth)
+	}
+	// Visitors within a minute share one game.
+	if b := get(); b.Room != a.Room || len(b.Frames) != len(a.Frames) {
+		t.Errorf("second demo differs: %s vs %s", b.Room, a.Room)
+	}
+}
+
+func BenchmarkDemo(b *testing.B) {
+	for i := range b.N {
+		if _, err := newDemo(uint64(i)); err != nil {
+			b.Fatal(err)
+		}
+	}
+}

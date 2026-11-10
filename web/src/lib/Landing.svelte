@@ -1,5 +1,6 @@
 <script lang="ts">
   import { load, nameKey, replayFiles, save, store } from "./store.svelte";
+  import DemoBackdrop from "./DemoBackdrop.svelte";
 
   interface Props {
     room?: string;
@@ -86,6 +87,8 @@
   }
 </script>
 
+<DemoBackdrop />
+
 <main class="landing">
   <h1>Parallax</h1>
   <p class="tag">Conquer the galaxy, one fleet at a time.</p>
@@ -120,17 +123,30 @@
 
 <style>
   .landing {
+    position: relative;
+    z-index: 1;
     max-width: 360px;
     margin: 12vh auto 0;
-    padding: 0 16px;
+    padding: 24px;
+    border-radius: 12px;
+    background: rgb(11 14 23 / 0.6);
+    backdrop-filter: blur(3px);
     display: flex;
     flex-direction: column;
     gap: 16px;
+  }
+  @media (min-width: 900px) {
+    .landing {
+      margin: 16vh 0 0 max(48px, calc(min(30vw, 420px) - 380px));
+      background: none;
+      backdrop-filter: none;
+    }
   }
   h1 {
     margin: 0;
     font-size: 48px;
     letter-spacing: 0.08em;
+    text-shadow: 0 2px 16px #000;
   }
   .tag {
     margin: -8px 0 8px;

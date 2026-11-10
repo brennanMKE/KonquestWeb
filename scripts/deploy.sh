@@ -2,12 +2,12 @@
 # shellcheck disable=SC2329 # install_/rollback_ functions are called by name
 # Deploy the Parallax game server to photon or yoyo, or roll one back.
 #
-#   deploy/deploy.sh photon            # build main's HEAD, ship it, restart, check
-#   deploy/deploy.sh yoyo
-#   deploy/deploy.sh both
-#   deploy/deploy.sh photon --rollback # back to the release before this one
-#   deploy/deploy.sh photon --check    # only run the checks against what's live
-#   deploy/deploy.sh yoyo --no-build   # ship bin/parallax-linux-arm64 as it is
+#   scripts/deploy.sh photon            # build main's HEAD, ship it, restart, check
+#   scripts/deploy.sh yoyo
+#   scripts/deploy.sh both
+#   scripts/deploy.sh photon --rollback # back to the release before this one
+#   scripts/deploy.sh photon --check    # only run the checks against what's live
+#   scripts/deploy.sh yoyo --no-build   # ship bin/parallax-linux-arm64 as it is
 #
 # It only replaces the binary. The systemd units, Apache vhosts, tailscale
 # serve, the Laya model and the System 1 key belong to the ops repos
@@ -215,7 +215,7 @@ checks() {
   "${SSH[@]}" "sudo journalctl -u $UNIT --since '-2min' --no-pager -o cat" |
     grep -E 'reopened saved rooms|System 1 model|level=ERROR|listening' | tail -5 | sed "s/^/   $HOST: /" || true
   if ((bad)); then
-    echo "$HOST: checks failed. Roll back with: deploy/deploy.sh $HOST --rollback"
+    echo "$HOST: checks failed. Roll back with: scripts/deploy.sh $HOST --rollback"
     return 1
   fi
   say "$HOST: all checks pass"

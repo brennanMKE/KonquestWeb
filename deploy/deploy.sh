@@ -42,7 +42,7 @@ cd "$(dirname "$0")/.."
 die() { printf 'deploy: %s\n' "$*" >&2; exit 1; }
 say() { printf '==> %s\n' "$*"; }
 
-usage() { sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
+usage() { sed -n '3,11p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 
 target="${1:-}"
 [[ -n "$target" ]] || usage

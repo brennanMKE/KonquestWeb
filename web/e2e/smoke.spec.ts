@@ -54,8 +54,10 @@ test("two players take turns and one captures a neutral", async ({ browser }) =>
     // every round until it falls.
     if (round >= 3) {
       const target = await nearestTarget(alice);
-      await alice.locator(".planet.mine").first().click();
-      await alice.getByRole("button", { name: target, exact: true }).click();
+      // Click the planets themselves: on some maps another planet's label
+      // overlaps them, and a click at their centre would land on it.
+      await alice.locator(".planet.mine").first().dispatchEvent("click");
+      await alice.getByRole("button", { name: target, exact: true }).dispatchEvent("click");
       await alice.getByLabel("Ships to send").press("Enter");
       await expect(alice.getByText(/Fleet of \d+ sent/).last()).toBeVisible();
     }

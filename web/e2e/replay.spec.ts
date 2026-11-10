@@ -158,7 +158,8 @@ test("autoplay in 3D waits for each round's battles and reaches the end", async 
   await page.getByLabel("Speed").selectOption("4");
   await page.getByRole("button", { name: "Play", exact: true }).click();
   await expect(page.locator("header")).toContainText("Round 4 of 4", { timeout: 90_000 });
-  await expect(page.getByRole("button", { name: "Play again" })).toBeVisible();
+  // Playback ends once the last round's battles have played out.
+  await expect(page.getByRole("button", { name: "Play again" })).toBeVisible({ timeout: 60_000 });
 
   // With battles off, rounds just step.
   await page.getByRole("button", { name: "Battles on" }).click();

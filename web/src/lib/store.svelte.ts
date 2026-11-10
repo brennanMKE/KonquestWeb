@@ -284,7 +284,7 @@ class Store {
     try {
       const res = await fetch(`/api/rooms/${encodeURIComponent(this.room)}`);
       if (res.status === 404) {
-        this.fatal = `Room ${this.room} has ended. Rooms close when the server restarts or after 10 minutes with nobody in them.`;
+        this.fatal = `Room ${this.room} has ended. Rooms close after 10 minutes with nobody in them.`;
         save(tokenKey(this.room), null);
         return;
       }

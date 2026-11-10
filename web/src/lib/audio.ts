@@ -35,6 +35,8 @@ export function setSound(on: boolean) {
  */
 export function unlockAudio() {
   if (!enabled) return;
+  // A closed context can't come back; start a new one.
+  if (ac?.state === "closed") ac = null;
   if (!ac) {
     const AC = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
     if (!AC) return;
@@ -52,7 +54,17 @@ export function unlockAudio() {
     const d = noiseBuf.getChannelData(0);
     for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
   }
-  if (ac.state === "suspended") ac.resume().catch(() => {});
+  // Suspended, or "interrupted" (Safari, after sleep or an output device
+  // change): resume. Anything but running needs it.
+  if (ac.state !== "running") ac.resume().catch(() => {});
+}
+
+// Browsers suspend audio in a hidden tab or across sleep. Coming back to
+// the tab resumes it, once a gesture has allowed sound at all.
+if (typeof document !== "undefined") {
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible" && ac && enabled) unlockAudio();
+  });
 }
 
 // --- Primitives --------------------------------------------------------------
@@ -222,7 +234,13 @@ const PRIORITY: Sound[] = [
 
 /** Plays a set of sounds, the most important few at once. */
 export function play(...names: Sound[]) {
-  if (!enabled || !ac || ac.state !== "running" || names.length === 0) return;
+  if (!enabled || !ac || names.length === 0) return;
+  if (ac.state !== "running") {
+    // Try to wake it (this works once a gesture has unlocked it before);
+    // this sound is skipped, the next ones play.
+    unlockAudio();
+    return;
+  }
   const list = [...new Set(names)].sort((a, b) => PRIORITY.indexOf(a) - PRIORITY.indexOf(b));
   for (const n of list.slice(0, MAX_AT_ONCE)) {
     try {

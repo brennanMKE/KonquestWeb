@@ -9,7 +9,10 @@
 # Locally, computer players use the System 1 model (Laya) by default: if
 # System 1 Arcade is installed, this starts Laya on :8799 when it isn't
 # already serving (log in .run/laya.log) and passes -system1 to the server.
-# Set LAYA_DIR to use another install. The server binary itself leaves
+# Set LAYA_DIR to use another install.
+#
+# Open rooms survive the restart: the server keeps them in .run/rooms
+# (-state) and reopens them, so players rejoin where they were. The server binary itself leaves
 # System 1 off unless -system1 is given, as on photon.
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -22,8 +25,8 @@ fi
 
 if pkill -f "bin/server" 2>/dev/null; then
   echo "Stopped the running server."
-  # Wait up to 5 s for it to exit and free its port.
-  for _ in $(seq 50); do
+  # Wait up to 10 s for it to save its rooms, exit and free its port.
+  for _ in $(seq 100); do
     pgrep -f "bin/server" >/dev/null || break
     sleep 0.1
   done
@@ -63,6 +66,11 @@ elif [[ " $* " != *" -system1 "* ]]; then
   else
     echo "System 1 Arcade's Laya isn't installed at $laya_dir; computer players will use Planner."
   fi
+fi
+
+if [[ " $* " != *" -state "* ]]; then
+  mkdir -p .run
+  args+=(-state .run/rooms)
 fi
 
 echo "Starting bin/server ${args[*]:-}"

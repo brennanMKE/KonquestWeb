@@ -49,14 +49,22 @@ func (m *Manager) create(f *proto.SaveFile) (*Room, error) {
 			return nil, err
 		}
 	}
+	m.start(r)
+	return r, nil
+}
+
+// start registers and runs a room; m.mu must be held.
+func (m *Manager) start(r *Room) {
+	code := r.code
 	m.rooms[code] = r
 	go func() {
 		r.Run()
 		m.mu.Lock()
-		delete(m.rooms, code)
+		if m.rooms[code] == r {
+			delete(m.rooms, code)
+		}
 		m.mu.Unlock()
 	}()
-	return r, nil
 }
 
 // Get finds a room by code, ignoring case.

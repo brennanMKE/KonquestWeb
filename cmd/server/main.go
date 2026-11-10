@@ -26,6 +26,7 @@ func main() {
 	s1Key := flag.String("system1-key", os.Getenv("PARALLAX_SYSTEM1_KEY"), "API key for the System 1 endpoint, sent as a Bearer token (default $PARALLAX_SYSTEM1_KEY, which keeps it out of the process list)")
 	s1Batch := flag.Bool("system1-batch", true, "send several states per request; off sends one request per state")
 	s1Timeout := flag.Duration("system1-timeout", 15*time.Second, "longest wait for one System 1 decision before playing Planner that turn")
+	stateDir := flag.String("state", "", "directory to keep open rooms in across restarts (off when empty); rooms are saved there every 30 s and at shutdown, and reopened at start")
 	origins := flag.String("origin", "", "comma-separated hosts whose pages may connect, for a proxy that rewrites Host (e.g. yoyo.example.ts.net)")
 	flag.Parse()
 
@@ -58,6 +59,22 @@ func main() {
 		health.changed = handler.Rooms().RefreshLobbies
 		go health.run()
 	}
+	if *stateDir != "" {
+		if n := handler.Rooms().RestoreAll(*stateDir); n > 0 {
+			log.Info("reopened saved rooms", "rooms", n, "dir", *stateDir)
+		}
+	}
+	saveRooms := func() {
+		if *stateDir == "" {
+			return
+		}
+		n, err := handler.Rooms().SaveAll(*stateDir)
+		if err != nil {
+			log.Error("saving rooms", "err", err)
+		}
+		log.Debug("saved rooms", "rooms", n)
+	}
+
 	srv := &http.Server{
 		Addr:              *addr,
 		Handler:           handler,
@@ -65,11 +82,28 @@ func main() {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	stopped := make(chan struct{})
 	go func() {
-		<-ctx.Done()
-		shutdown, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		srv.Shutdown(shutdown)
+		defer close(stopped)
+		tick := time.NewTicker(30 * time.Second)
+		defer tick.Stop()
+		for {
+			select {
+			case <-tick.C:
+				saveRooms()
+			case <-ctx.Done():
+				shutdown, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				srv.Shutdown(shutdown)
+				// Rooms keep running until the process exits: save them last,
+				// so a restart brings every game back where it was.
+				saveRooms()
+				if *stateDir != "" {
+					log.Info("saved rooms for the next start", "dir", *stateDir)
+				}
+				return
+			}
+		}
 	}()
 
 	log.Info("listening", "addr", *addr, "dev", *dev)
@@ -77,6 +111,7 @@ func main() {
 		log.Error("server", "err", err)
 		os.Exit(1)
 	}
+	<-stopped
 }
 
 // splitList splits a comma-separated flag, dropping empty entries.

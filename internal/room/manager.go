@@ -24,7 +24,20 @@ type Manager struct {
 
 // NewManager returns a manager whose rooms use opts.
 func NewManager(opts Options) *Manager {
-	return &Manager{opts: opts, rooms: map[string]*Room{}}
+	m := &Manager{rooms: map[string]*Room{}}
+	if opts.ModelGames > 0 {
+		opts.quota = NewModelQuota(opts.ModelGames)
+		// Lobbies stop or start offering model players as slots run out
+		// or free up.
+		opts.quota.changed = m.RefreshLobbies
+	}
+	m.opts = opts
+	return m
+}
+
+// ModelGames is how many games hold a model slot, and the limit (0 = none).
+func (m *Manager) ModelGames() (inUse, limit int) {
+	return m.opts.quota.InUse(), m.opts.ModelGames
 }
 
 // Create starts a new room with an unused code.

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -75,6 +76,10 @@ func (c *Client) post(ctx context.Context, body Prompt) (Answers, error) {
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
+	// The server can skip work nobody will wait for.
+	if d, ok := ctx.Deadline(); ok {
+		req.Header.Set("X-Deadline-Ms", strconv.FormatInt(d.UnixMilli(), 10))
+	}
 	if c.APIKey != "" {
 		req.Header.Set("Authorization", "Bearer "+c.APIKey)
 	}
@@ -88,6 +93,9 @@ func (c *Client) post(ctx context.Context, body Prompt) (Answers, error) {
 	}
 	defer resp.Body.Close()
 	data, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
+	if resp.StatusCode == http.StatusServiceUnavailable {
+		return nil, fmt.Errorf("%w: %s", ErrBusy, strings.TrimSpace(string(data)))
+	}
 	if resp.StatusCode/100 != 2 {
 		return nil, fmt.Errorf("%s: %s", resp.Status, strings.TrimSpace(string(data)))
 	}

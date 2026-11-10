@@ -54,6 +54,11 @@ type Options struct {
 	// DefaultAI is the kind added when the host doesn't name one, and the
 	// lobby's first choice. Empty means Planner.
 	DefaultAI string
+	// ModelGames caps how many games at once may have computers that ask a
+	// model (System 1); 0 means no cap. The manager shares one count across
+	// its rooms.
+	ModelGames int
+	quota      *ModelQuota
 }
 
 type seat struct {
@@ -137,6 +142,7 @@ func (r *Room) Run() {
 		f := <-r.inbox
 		f()
 	}
+	r.opts.quota.Release(r.code)
 	for c := range r.clients {
 		close(c.out)
 	}
@@ -474,7 +480,7 @@ func (r *Room) available(kind string) bool {
 		return false
 	}
 	ch, ok := p.(ai.Checker)
-	return !ok || ch.Up()
+	return !ok || (ch.Up() && r.opts.quota.Available(r.code))
 }
 
 func (r *Room) defaultAI() string {
@@ -536,6 +542,10 @@ func (r *Room) addAI(c *Client, kind string) {
 				r.unavailable(c, ch)
 				return
 			}
+			if !r.opts.quota.Available(r.code) {
+				r.modelFull(c, ch)
+				return
+			}
 			if len(r.seats) >= rules.MaxPlayers {
 				r.sendError(c, proto.ErrRoomFull, "the room is full")
 				return
@@ -553,6 +563,12 @@ const checkTimeout = 3 * time.Second
 // refreshes the lobby so it's no longer offered.
 func (r *Room) unavailable(c *Client, p ai.Player) {
 	r.sendError(c, proto.ErrAIUnavailable, "The %s model can't be reached right now, so %s players can't be added. Add a Planner instead, or try again later.", p.Name(), p.Name())
+	r.broadcastLobby()
+}
+
+// modelFull tells the host every game slot for model players is taken.
+func (r *Room) modelFull(c *Client, p ai.Player) {
+	r.sendError(c, proto.ErrAIUnavailable, "%d games are using %s players right now, the most this server allows. Use Planner players, or try again when one finishes.", r.opts.quota.Limit, p.Name())
 	r.broadcastLobby()
 }
 
@@ -688,6 +704,14 @@ func (r *Room) newGame(c *Client) {
 }
 
 func (r *Room) begin(c *Client) {
+	if r.usesModel() && !r.opts.quota.Acquire(r.code) {
+		for _, s := range r.seats {
+			if s.kind == proto.KindAI && r.modelKind(s.aiKind) {
+				r.modelFull(c, r.opts.AI[s.aiKind])
+				return
+			}
+		}
+	}
 	g, err := rules.New(len(r.seats), r.settings.Settings, r.seed)
 	if err != nil {
 		r.sendError(c, proto.ErrBadSetting, "%v", err)
@@ -706,9 +730,16 @@ func (r *Room) replaceWithAI(c *Client, m *proto.ReplaceWithAI) {
 		r.sendError(c, proto.ErrBadMessage, "unknown AI kind %q", m.Kind)
 		return
 	}
+	if r.modelKind(kind) && !r.opts.quota.Available(r.code) {
+		r.modelFull(c, r.opts.AI[kind])
+		return
+	}
 	if !r.available(kind) {
 		r.unavailable(c, r.opts.AI[kind])
 		return
+	}
+	if r.modelKind(kind) && r.phase == proto.PhasePlaying {
+		r.opts.quota.Acquire(r.code)
 	}
 	if m.Seat < 0 || m.Seat >= len(r.seats) {
 		r.sendError(c, proto.ErrBadSeat, "no seat %d", m.Seat)
@@ -777,6 +808,7 @@ func (r *Room) finishTurn(seatN int) {
 	}
 	if r.game.Over() {
 		r.phase = proto.PhaseOver
+		r.opts.quota.Release(r.code)
 		r.log.Info("game over", "winner", r.game.Winner(), "round", round)
 		msg := r.gameOverMsg()
 		for _, s := range r.members() {
@@ -1055,6 +1087,8 @@ func (r *Room) load(f *proto.SaveFile) error {
 	r.phase = proto.PhasePlaying
 	if g.Over() {
 		r.phase = proto.PhaseOver
+	} else if r.usesModel() {
+		r.opts.quota.force(r.code)
 	}
 	return nil
 }

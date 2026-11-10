@@ -24,6 +24,13 @@ Then start Parallax with `-system1 http://127.0.0.1:8799/predict`.
   /predict and /stats (/health stays open). Give Parallax the same key in
   `PARALLAX_SYSTEM1_KEY` (or `-system1-key`); keep both in root-only
   environment files rather than on the command line.
+- `--max-queue` (or `SYSTEM1_LAYA_MAX_QUEUE`, default 4) bounds how many
+  requests may wait for the model; past it `/predict` answers 503 busy at
+  once. A request whose `X-Deadline-Ms` passes while it waits is dropped
+  with 503 instead of answered for nobody. Parallax treats both as "busy":
+  that turn plays Planner and the model isn't marked down.
+- `/stats` reports the cache and request counts: answered, busy, expired,
+  unauthorized (wrong or missing key), bad requests, and the most waiting.
 - Environment: `SYSTEM1_LAYA_MODEL` (another checkpoint),
   `SYSTEM1_LAYA_WEIGHTS` (tuned head), `SYSTEM1_LAYA_CACHE` (cache size).
 - On an Apple M-series CPU with no GPU, a decision on a 32³ map takes about

@@ -119,6 +119,9 @@ func (r *Room) restore(st *State) error {
 		r.game = g
 		if g.Over() {
 			r.phase = proto.PhaseOver
+		} else if r.usesModel() {
+			// A game that was running keeps its model players.
+			r.opts.quota.force(r.code)
 		}
 	}
 	return nil

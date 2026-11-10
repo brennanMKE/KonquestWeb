@@ -3,8 +3,10 @@ package ai
 import (
 	"cmp"
 	"context"
+	"errors"
 	"fmt"
 	"slices"
+	"sync/atomic"
 	"time"
 
 	"parallax/internal/rules"
@@ -246,6 +248,11 @@ type System1 struct {
 	// Health, if set, tracks whether the model is reachable. While it's
 	// down the model is skipped and Fallback plays at once.
 	Health Health
+	// Gate, if set, caps requests in flight to the model; a decision that
+	// can't get a slot in time plays Fallback.
+	Gate *Gate
+	// Stats, if set, counts decisions and fallbacks.
+	Stats *Stats
 }
 
 // Health is a service a computer player depends on.
@@ -283,8 +290,15 @@ func (s *System1) Orders(v rules.View) []Order {
 	if sit.Empty() {
 		return Decide(sit, Answers{})
 	}
-	if !s.Up() && s.Fallback != nil {
-		return s.Fallback.Orders(v)
+	fallback := func(count func(*Stats) *atomic.Int64) []Order {
+		s.Stats.add(count)
+		if s.Fallback != nil {
+			return s.Fallback.Orders(v)
+		}
+		return nil
+	}
+	if !s.Up() {
+		return fallback(func(s *Stats) *atomic.Int64 { return &s.Down })
 	}
 	timeout := s.Timeout
 	if timeout == 0 {
@@ -292,16 +306,27 @@ func (s *System1) Orders(v rules.View) []Order {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
+	release, ok := s.Gate.Acquire(ctx)
+	if !ok {
+		return fallback(func(s *Stats) *atomic.Int64 { return &s.Queued })
+	}
+	s.Stats.add(func(s *Stats) *atomic.Int64 { return &s.Asked })
 	ans, err := s.Model.Ask(ctx, sit.Prompt())
-	if err != nil {
+	release()
+	switch {
+	case errors.Is(err, ErrBusy):
+		// Load, not an outage: the model stays up.
+		return fallback(func(s *Stats) *atomic.Int64 { return &s.Busy })
+	case errors.Is(err, context.DeadlineExceeded):
+		// Slow under load, most likely; the health probe finds real outages.
+		return fallback(func(s *Stats) *atomic.Int64 { return &s.Timeout })
+	case err != nil:
 		if s.OnError != nil {
 			s.OnError(err)
 		}
-		if s.Fallback != nil {
-			return s.Fallback.Orders(v)
-		}
-		return nil
+		return fallback(func(s *Stats) *atomic.Int64 { return &s.Failed })
 	}
+	s.Stats.add(func(s *Stats) *atomic.Int64 { return &s.Answered })
 	if s.OnAnswer != nil {
 		s.OnAnswer()
 	}

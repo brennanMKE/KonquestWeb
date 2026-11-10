@@ -902,3 +902,67 @@ func TestPlayAgain(t *testing.T) {
 		t.Fatalf("new game starts at round %d", yt.Round)
 	}
 }
+
+func TestModelGamesQuota(t *testing.T) {
+	model := &modelAI{}
+	model.up.Store(true)
+	m := NewManager(Options{Logger: quietLogger(), AI: map[string]ai.Player{"planner": ai.Planner{}, "model": model}, DefaultAI: "model", ModelGames: 1})
+	s := proto.DefaultSettings()
+	s.AIDelayMs = 0
+	s.MaxRounds = 2
+	setup := func() (*Room, *testClient) {
+		r := m.Create()
+		t.Cleanup(r.Close)
+		c, _ := join(t, r, "Host")
+		c.send(&proto.SetSettings{Settings: s})
+		expect[proto.Lobby](c)
+		c.send(&proto.AddAI{Kind: "model"})
+		if l := expect[proto.Lobby](c); len(l.Seats) != 2 {
+			t.Fatalf("seats %+v", l.Seats)
+		}
+		return r, c
+	}
+	_, a := setup()
+	_, b := setup()
+
+	// The first game takes the only slot.
+	a.send(&proto.StartGame{})
+	expect[proto.YourTurn](a)
+	if inUse, limit := m.ModelGames(); inUse != 1 || limit != 1 {
+		t.Fatalf("in use %d of %d", inUse, limit)
+	}
+	// The second can't start with its model player, and no longer offers it.
+	b.send(&proto.StartGame{})
+	if code := errCode(t, b); code != proto.ErrAIUnavailable {
+		t.Fatalf("second start: %s", code)
+	}
+	if l := expect[proto.Lobby](b); l.Phase != proto.PhaseLobby || slices.Contains(l.AIKinds, "model") {
+		t.Fatalf("second lobby: phase %s, kinds %v", l.Phase, l.AIKinds)
+	}
+	b.send(&proto.AddAI{Kind: "model"})
+	if code := errCode(t, b); code != proto.ErrAIUnavailable {
+		t.Fatalf("adding while full: %s", code)
+	}
+
+	// When the first game ends, the slot frees and the second can start.
+	for range 2 {
+		a.send(&proto.EndTurn{})
+		expect[proto.RoundResult](a)
+	}
+	expect[proto.GameOver](a)
+	if inUse, _ := m.ModelGames(); inUse != 0 {
+		t.Fatalf("in use after game over: %d", inUse)
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		l := expect[proto.Lobby](b) // refreshed when the slot frees
+		if slices.Contains(l.AIKinds, "model") {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the lobby never offered the model again")
+		}
+	}
+	b.send(&proto.StartGame{})
+	expect[proto.YourTurn](b)
+}

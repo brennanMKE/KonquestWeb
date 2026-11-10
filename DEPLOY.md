@@ -74,6 +74,16 @@ The rule-based computer players need nothing extra. The System 1 players ask a s
 `-system1 http://127.0.0.1:8799/predict` to the server's flags, with the shared key in `PARALLAX_SYSTEM1_KEY`. If the
 model is unreachable, those players play by the rules instead.
 
+Load limits, so one server can't swamp the model:
+
+- `-system1-concurrency 2`: the most model requests in flight at once, across every game.
+- `-system1-wait 2s`: how long a turn waits for a free slot before playing Planner.
+- `-system1-games 10`: the most games at once with System 1 players. Past it, lobbies stop offering them and games
+  with them can't start until one finishes.
+
+Every five minutes, while the numbers change, the server logs a "System 1 use" line: decisions asked and answered,
+fallbacks by reason, requests in flight and games using it.
+
 ## Link previews and images
 
 Shared links show [web/public/og.jpg](web/public/og.jpg). The page's preview tags point at your own server

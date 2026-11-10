@@ -121,7 +121,8 @@ class Store {
   replayPending = $state(false);
   /** The latest round waiting for its replay. */
   private pendingRound = 0;
-  private afterReplay: (() => void) | null = null;
+  /** What waits for the battles: the round's log lines, the game-over sound. */
+  private afterReplay: (() => void)[] = [];
   private replayFallback = 0;
 
   /**
@@ -133,9 +134,9 @@ class Store {
     if (round < this.pendingRound) return;
     clearTimeout(this.replayFallback);
     this.replayPending = false;
-    const f = this.afterReplay;
-    this.afterReplay = null;
-    f?.();
+    const fs = this.afterReplay;
+    this.afterReplay = [];
+    for (const f of fs) f();
   }
 
   /**
@@ -332,7 +333,7 @@ class Store {
     clearTimeout(this.replayFallback);
     this.replayPending = false;
     this.pendingRound = 0;
-    this.afterReplay = null;
+    this.afterReplay = [];
   }
 
   /** The host takes the room back to the lobby for another game. */
@@ -392,10 +393,16 @@ class Store {
       }
       case "round_result":
         this.view = this.named(m.view);
-        for (const e of m.events) {
-          this.addEvent(e);
-          this.noteActivity(e.planet, m.round);
-        }
+        // The log tells the round's results once its battles have played,
+        // so it doesn't give them away.
+        const logRound = () => {
+          for (const e of m.events) {
+            this.addEvent(e);
+            this.noteActivity(e.planet, m.round);
+          }
+        };
+        if (this.playsBattles) this.afterReplay.push(logRound);
+        else logRound();
         // A replaying board plays each battle's sound as its battle ends.
         if (!this.playsBattles) play(...m.events.map((e) => soundFor(e, this.seat)).filter((s): s is Sound => s !== null));
         this.lastEvents = { round: m.round, events: m.events };
@@ -413,7 +420,7 @@ class Store {
       case "game_over":
         if (this.phase !== "over") {
           const sound = () => play(m.winner === this.seat ? "win" : "gameover");
-          if (this.replayPending) this.afterReplay = sound;
+          if (this.replayPending) this.afterReplay.push(sound);
           else sound();
         }
         this.standings = m.standings;

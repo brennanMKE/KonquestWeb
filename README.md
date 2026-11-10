@@ -18,6 +18,7 @@ make sim ARGS="-seed 7 -depth 4"   # a seeded AI-vs-AI game on a 3D map, with it
 make build && bin/server            # one binary with the web client; open http://localhost:8080
 make e2e                           # browser tests (Playwright)
 scripts/restart.sh                 # stop the running server, rebuild and start again
+deploy/deploy.sh photon            # build main, ship it to photon (or yoyo, both), restart and check; --rollback, --check
 make shots                         # regenerate the link preview and README images from a seeded game
 ```
 

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2329 # install_/rollback_ functions are called by name
 # Deploy the Parallax game server to photon or yoyo, or roll one back.
 #
 #   deploy/deploy.sh photon            # build main's HEAD, ship it, restart, check
@@ -36,8 +37,6 @@
 # key: never read), vhosts and certs, /etc/hosts, Tailscale, and the saved
 # rooms in /var/lib/parallax (they hold seat tokens).
 set -euo pipefail
-# The install_/rollback_ functions are called by name: "install_$h".
-# shellcheck disable=SC2329
 cd "$(dirname "$0")/.."
 
 die() { printf 'deploy: %s\n' "$*" >&2; exit 1; }
@@ -121,8 +120,6 @@ ship() {
 install_photon() {
   "${SSH[@]}" bash -s -- "$COMMIT" "$SHA" "$KEEP" <<'REMOTE'
 set -euo pipefail
-# The install_/rollback_ functions are called by name: "install_$h".
-# shellcheck disable=SC2329
 commit=$1 sha=$2 keep=$3
 stage=/tmp/parallax-$commit
 dir=/opt/parallax/releases/$commit
@@ -150,8 +147,6 @@ REMOTE
 install_yoyo() {
   "${SSH[@]}" bash -s -- "$COMMIT" <<'REMOTE'
 set -euo pipefail
-# The install_/rollback_ functions are called by name: "install_$h".
-# shellcheck disable=SC2329
 stage=/tmp/parallax-$1
 if sudo cmp -s "$stage" /usr/local/bin/parallax; then
   echo "yoyo already runs this build; restarting anyway"
@@ -167,8 +162,6 @@ REMOTE
 rollback_photon() {
   "${SSH[@]}" bash -s <<'REMOTE'
 set -euo pipefail
-# The install_/rollback_ functions are called by name: "install_$h".
-# shellcheck disable=SC2329
 cd /opt/parallax
 live=$(basename "$(readlink current)")
 prev=$(ls -1t releases | grep -vx "$live" | head -1)
@@ -188,8 +181,6 @@ REMOTE
 rollback_yoyo() {
   "${SSH[@]}" bash -s <<'REMOTE'
 set -euo pipefail
-# The install_/rollback_ functions are called by name: "install_$h".
-# shellcheck disable=SC2329
 [[ -f /usr/local/bin/parallax.prev ]] || { echo "no /usr/local/bin/parallax.prev to roll back to" >&2; exit 1; }
 # The unit passes -state; builds before e847c8e don't know it and won't start.
 if ! /usr/local/bin/parallax.prev -h 2>&1 | grep -q -- '-state'; then

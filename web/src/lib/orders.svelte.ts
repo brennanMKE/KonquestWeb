@@ -94,6 +94,12 @@ class Orders {
       return;
     }
     store.send({ type: "send_fleet", from: this.source, to: this.dest, ships: n });
+    // The ships are committed now. Take them off the planet at once rather
+    // than when the server's reply comes: on a slow link the next order
+    // would otherwise start from the old count. The reply's view replaces
+    // this one.
+    const src = this.view.planets[this.source];
+    if (src.ships !== undefined) src.ships -= n;
     // The source stays picked for the next destination while it has ships
     // left; picking it again lets it go.
     this.dest = null;

@@ -14,7 +14,7 @@ Where the work stands, for picking it up in a new session. Host details stay in 
   - counts in Laya's `/stats` and the server's "System 1 use" log line
 
 ## Deployed
-- Both hosts run fb50a0d, deployed 2026-11-10: order bar, System 1 limits, finished games load to their final board, sound starts on iOS taps, fast 3D replays no longer stall.
+- Both hosts run af4f375, deployed 2026-11-10: order bar, System 1 limits, finished games load to their final board, sound starts on iOS taps, fast 3D replays no longer stall, the sound button shows when the browser blocks sound and plays a test tone.
 
 ## Not deployed yet
 - Laya's new queue limit needs `deploy/laya/` redeployed by whoever runs the model host.

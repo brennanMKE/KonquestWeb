@@ -447,8 +447,24 @@ func (r *Room) join(c *Client, j *proto.Join) {
 	case proto.PhasePlaying:
 		r.sendTurn(s)
 	case proto.PhaseOver:
+		// The final board first: without a view the client has nothing to show.
+		r.sendFinal(s)
 		r.send(c, r.gameOverMsg())
 	}
+}
+
+// sendFinal sends s the board as the game ended, with no turn in play.
+func (r *Room) sendFinal(s *seat) {
+	v := r.game.View(r.seatIndex(s))
+	if s.watching {
+		v = r.game.Spectate(r.allComputers())
+	}
+	active := r.game.Active()
+	name := ""
+	if active >= 0 && active < len(r.seats) {
+		name = r.seats[active].name
+	}
+	r.send(s.client, &proto.PlayerTurn{Round: r.game.Round(), Seat: active, Name: name, View: v})
 }
 
 func (r *Room) setSettings(c *Client, ps proto.Settings) {

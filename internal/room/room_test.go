@@ -415,6 +415,9 @@ func TestAISeatsAndGameOver(t *testing.T) {
 	// A late reconnect gets the result.
 	c := connect(t, r)
 	c.send(&proto.Join{Token: expectToken(t, alice)})
+	if pt := expect[proto.PlayerTurn](c); !pt.View.Over || len(pt.View.Planets) == 0 {
+		t.Fatalf("late reconnect: no final board: %+v", pt.View)
+	}
 	expect[proto.GameOver](c)
 }
 

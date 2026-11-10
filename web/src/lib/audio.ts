@@ -65,6 +65,12 @@ if (typeof document !== "undefined") {
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible" && ac && enabled) unlockAudio();
   });
+  // iOS Safari doesn't count pointerdown (a touch starting) as a gesture
+  // that may start audio; touchend and click are. Listen on every page,
+  // not only the game's, so any tap or key press turns sound on.
+  for (const type of ["touchend", "click", "keydown"]) {
+    document.addEventListener(type, unlockAudio, { capture: true, passive: true });
+  }
 }
 
 // --- Primitives --------------------------------------------------------------

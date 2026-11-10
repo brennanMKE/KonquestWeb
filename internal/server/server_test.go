@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
@@ -341,9 +342,27 @@ func TestFinishedReplay(t *testing.T) {
 		t.Errorf("replay of no room: %d", resp.StatusCode)
 	}
 	// Once it's over, anyone may save the file too.
-	if resp, _ := http.Get(ts.URL + "/api/rooms/" + code + "/save"); resp.StatusCode != http.StatusOK {
-		t.Errorf("save of a finished game: %d", resp.StatusCode)
+	resp, _ = http.Get(ts.URL + "/api/rooms/" + code + "/save")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("save of a finished game: %d", resp.StatusCode)
 	}
+	file, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+
+	// Loading the finished game's file shows its final board, not an endless wait.
+	resp, _ = http.Post(ts.URL+"/api/load", "application/json", bytes.NewReader(file))
+	var loaded struct{ Code string }
+	json.NewDecoder(resp.Body).Decode(&loaded)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("load of a finished game: %d", resp.StatusCode)
+	}
+	bob := dial(t, ts, loaded.Code)
+	bob.send(&proto.Join{Name: "Alice"})
+	if pt := expect[proto.PlayerTurn](bob); !pt.View.Over || len(pt.View.Planets) == 0 {
+		t.Fatalf("loaded finished game: no final board: %+v", pt.View)
+	}
+	expect[proto.GameOver](bob)
 	resp, _ = http.Post(ts.URL+"/api/replay", "application/json", strings.NewReader(`{"version": 1, "seats": []}`))
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Errorf("replay of an empty file: %d", resp.StatusCode)

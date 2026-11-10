@@ -13,9 +13,10 @@ Where the work stands, for picking it up in a new session. Host details stay in 
   - Laya `--max-queue`, 503 busy, `X-Deadline-Ms`
   - counts in Laya's `/stats` and the server's "System 1 use" log line
 
+## Deployed
+- Both hosts run 1fb84e0 (order bar and System 1 limits), deployed 2026-11-09.
+
 ## Not deployed yet
-- The order bar and the System 1 limits are on `main` but not on either deployed host.
-  `scripts/deploy.sh all` ships the Parallax side.
 - Laya's new queue limit needs `deploy/laya/` redeployed by whoever runs the model host.
 
 ## Open ideas

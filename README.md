@@ -1,5 +1,7 @@
 # Parallax
 
+![A 3D star map in the middle of a six-player game: coloured empires, planets and fleets in flight](docs/images/map.jpg)
+
 A browser-based, real-time multiplayer space strategy game in the style of KDE Konquest (originally
 GNU-Lactic Konquest). Players join a room from any browser, each sees only what their own empire would
 see, and turns resolve on an authoritative Go server over WebSockets.
@@ -16,9 +18,12 @@ make sim ARGS="-seed 7 -depth 4"   # a seeded AI-vs-AI game on a 3D map, with it
 make build && bin/server            # one binary with the web client; open http://localhost:8080
 make e2e                           # browser tests (Playwright)
 scripts/restart.sh                 # stop the running server, rebuild and start again
+make shots                         # regenerate the link preview and README images from a seeded game
 ```
 
 ## How it plays
+
+![Rounds of a game playing out in the 3D view](docs/images/battles.gif)
 
 - A grid of planets. Each planet builds ships every turn and has a kill percentage that decides how
   well its ships fight.

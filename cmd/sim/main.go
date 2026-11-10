@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"parallax/internal/ai"
+	"parallax/internal/proto"
 	"parallax/internal/rules"
 )
 
@@ -30,10 +32,12 @@ func main() {
 	url := flag.String("url", "", "System 1 decision endpoint, e.g. http://127.0.0.1:8000/predict")
 	key := flag.String("key", "", "API key for the endpoint (sent as a Bearer token)")
 	batch := flag.Bool("batch", true, "send several states in one request; off sends one request per state")
+	savePath := flag.String("save", "", "write the finished game to this file, for the replay viewer (Watch saved games)")
+	room := flag.String("room", "STAR", "room code in the saved file; faction and planet names come from it")
 	verbose := flag.Bool("v", false, "with system1 seats, print every answer that disagrees with the oracle")
 	flag.Parse()
 
-	cfg := config{kinds: strings.Split(*kinds, ","), quiet: *quiet, verbose: *verbose}
+	cfg := config{kinds: strings.Split(*kinds, ","), quiet: *quiet, verbose: *verbose, save: *savePath, room: strings.ToUpper(*room)}
 	if *url != "" {
 		cfg.client = &ai.Client{URL: *url, APIKey: *key, Batch: *batch}
 	}
@@ -48,6 +52,8 @@ type config struct {
 	client  *ai.Client
 	quiet   bool
 	verbose bool
+	save    string
+	room    string
 }
 
 // tally counts a System 1 model's answers against the oracle's.
@@ -101,6 +107,11 @@ func run(players int, s rules.Settings, seed uint64, cfg config) error {
 		}
 	}
 
+	if cfg.save != "" {
+		if err := saveGame(cfg.save, cfg.room, g, s, kinds); err != nil {
+			return err
+		}
+	}
 	if t.asked > 0 {
 		fmt.Printf("System 1 agreed with the oracle on %d of %d questions (%.1f%%), %.0f ms per decision.\n",
 			t.agreed, t.asked, 100*float64(t.agreed)/float64(t.asked), float64(t.elapsed.Milliseconds())/float64(t.decisions))
@@ -206,4 +217,22 @@ func turn(g *rules.Game, kind string, cfg config, t *tally) ([]rules.Event, erro
 		}
 	}
 	return g.EndTurn(seat)
+}
+
+// saveGame writes the game as a save file, every seat a computer.
+func saveGame(path, room string, g *rules.Game, s rules.Settings, kinds []string) error {
+	ps := proto.DefaultSettings()
+	ps.Settings = s
+	f := proto.SaveFile{Version: proto.SaveVersion, Seed: g.Seed(), Room: room, Round: g.Round(), Settings: ps, Actions: g.Actions()}
+	for i, k := range kinds {
+		if k == "oracle" {
+			k = proto.AIPlanner
+		}
+		f.Seats = append(f.Seats, proto.SavedSeat{Name: fmt.Sprintf("Player %d", i+1), Kind: proto.KindAI, AIKind: k})
+	}
+	b, err := json.MarshalIndent(f, "", " ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, b, 0o644)
 }

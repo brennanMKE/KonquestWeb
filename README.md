@@ -121,6 +121,15 @@ In the lobby, add three computers, tick **Watch only**, and start. The computer 
 so you can follow each move (set it higher if you like). With no human playing you see everything:
 every fleet, every planet's stats and every battle, replayed in 3D each round.
 
+## No mouse needed
+
+Press an arrow key during your turn (or connect a gamepad) and an order bar appears: **From → To → Ships → Send**.
+Up and down scroll the list, and each planet is ringed on the map with its ships, production and travel time shown as
+you pass it. Enter or → locks a choice in and moves on, ← steps back to change it, and Space changes the sort order
+(most ships, nearest, weakest, recent activity). On the ship count a tap is 1 ship and holding is 5 at a time. Shift+Enter
+twice ends the turn. A gamepad does the same: D-pad or stick, A select, B back, X sort, LB/RB half or all ships, Start
+twice to end the turn. Arcade controller boards that send arrow keys and Enter work as a keyboard.
+
 ## Two screens
 
 **Fill page** (top left of the board) shows only the map, edge to edge, ready for the system's full screen

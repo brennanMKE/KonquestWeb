@@ -7,6 +7,7 @@
   import { popOut, type Popout } from "./popout";
   import Board from "./Board.svelte";
   import Controls from "./Controls.svelte";
+  import OrderBar from "./OrderBar.svelte";
 
   let view = $derived(store.view!);
   let settings = $derived(view.settings);
@@ -85,11 +86,13 @@
   function onkey(e: KeyboardEvent) {
     unlockAudio();
     if (e.key === "Escape" && store.replayPending) return;
+    if (bar?.key(e)) return;
     if (orders.key(e)) return;
     if (e.key === "Escape" && fullPage) fullPage = false;
   }
 
   let activeName = $derived(store.active >= 0 ? store.playerName(store.active) : "");
+  let bar = $state<OrderBar | null>(null);
 </script>
 
 <svelte:window onkeydown={onkey} onpointerdown={unlockAudio} />
@@ -150,6 +153,7 @@
           dest={orders.measuring ? orders.measureB : orders.dest}
           onpick={orders.pick}
           onhover={(id) => (orders.hover = id)}
+          focus={orders.focus}
           replay={replays ? store.lastEvents : null}
           onreplaydone={(round) => store.replayDone(round)}
         />
@@ -181,6 +185,7 @@
           {popout ? "Put controls back" : "Pop out controls"}
         </button>
       </div>
+      <OrderBar bind:this={bar} />
       {#if fullPage && fullHint}
         <div class="full-hint">Press Esc to return</div>
       {/if}

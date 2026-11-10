@@ -101,6 +101,14 @@ class Store {
   standings = $state<Standing[] | null>(null);
   winner = $state(-1);
   toast = $state("");
+  /**
+   * The last round each planet saw activity this player knows of: a fleet
+   * sent from it, or ships arriving there. For sorting the order bar.
+   */
+  activity = $state<Record<number, number>>({});
+  private noteActivity(planet: number, round: number) {
+    if (planet >= 0 && (this.activity[planet] ?? 0) < round) this.activity[planet] = round;
+  }
   /** The events of the last resolved round, for the board to replay. */
   lastEvents = $state<{ round: number; events: GameEvent[] } | null>(null);
   /** Set while the 3D board replays battles; it plays their sounds then. */
@@ -320,6 +328,7 @@ class Store {
     this.standings = null;
     this.winner = -1;
     this.lastEvents = null;
+    this.activity = {};
     clearTimeout(this.replayFallback);
     this.replayPending = false;
     this.pendingRound = 0;
@@ -373,6 +382,7 @@ class Store {
         const f = m.view.fleets.find((f) => f.id === m.fleetId);
         play("launch");
         if (f) {
+          this.noteActivity(f.from, this.round);
           this.addLog(
             this.round,
             `Fleet of ${f.ships} sent from ${this.planetName(f.from)} to ${this.planetName(f.to)}, arriving in round ${f.arrivalRound}.`,
@@ -382,7 +392,10 @@ class Store {
       }
       case "round_result":
         this.view = this.named(m.view);
-        for (const e of m.events) this.addEvent(e);
+        for (const e of m.events) {
+          this.addEvent(e);
+          this.noteActivity(e.planet, m.round);
+        }
         // A replaying board plays each battle's sound as its battle ends.
         if (!this.playsBattles) play(...m.events.map((e) => soundFor(e, this.seat)).filter((s): s is Sound => s !== null));
         this.lastEvents = { round: m.round, events: m.events };

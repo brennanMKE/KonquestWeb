@@ -17,6 +17,8 @@
     dest?: number | null;
     onpick?: (id: number) => void;
     onhover?: (id: number | null) => void;
+    /** A planet being browsed in the order bar: highlighted, like a hover. */
+    focus?: number | null;
     /** Battle replays are a 3D view feature; the map ignores this. */
     replay?: { round: number; events: GameEvent[] } | null;
     onreplaydone?: (round: number) => void;
@@ -35,6 +37,7 @@
     dest = null,
     onpick,
     onhover,
+    focus = null,
   }: Props = $props();
 
   let hover = $state<number | null>(null);
@@ -59,7 +62,8 @@
   let ordered = $derived([...planets].sort((a, b) => a.pos.z - b.pos.z));
 
   // The line from the chosen source to the destination or hovered planet.
-  let target = $derived(dest ?? (source !== null && hover !== source ? hover : null));
+  let hovered = $derived(focus ?? hover);
+  let target = $derived(dest ?? (source !== null && hovered !== source ? hovered : null));
   let line = $derived(
     source !== null && target !== null ? { a: planets[source], b: planets[target] } : null,
   );
@@ -144,6 +148,9 @@
       onmouseenter={() => setHover(p.id)}
     >
       <circle cx={cx(p)} cy={cy(p)} r="0.48" fill="transparent" />
+      {#if p.id === focus}
+        <circle class="focus" cx={cx(p)} cy={cy(p)} r={r + 0.28} />
+      {/if}
       {#if p.id === source || p.id === dest}
         <circle class="ring" class:dest={p.id === dest} cx={cx(p)} cy={cy(p)} r={r + 0.1} />
       {/if}
@@ -189,6 +196,11 @@
     fill: none;
     stroke: var(--text);
     stroke-width: 0.06;
+  }
+  .focus {
+    fill: none;
+    stroke: #7cc4ff;
+    stroke-width: 0.1;
   }
   .ring.dest {
     stroke-dasharray: 0.1 0.08;

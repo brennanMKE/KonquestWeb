@@ -24,6 +24,8 @@
     dest?: number | null;
     onpick?: (id: number) => void;
     onhover?: (id: number | null) => void;
+    /** A planet being browsed in the order bar: highlighted, like a hover. */
+    focus?: number | null;
     /** The last round's events; each new round's battles are replayed. */
     replay?: { round: number; events: GameEvent[] } | null;
     /** Called when a round's replay has finished (or had nothing to show). */
@@ -48,6 +50,7 @@
     dest = null,
     onpick,
     onhover,
+    focus = null,
     replay = null,
     onreplaydone,
     ambient = false,
@@ -159,6 +162,8 @@
     }
     pickables = [];
     rings = [];
+    // The order bar's planet counts as hovered, so the aim line follows it.
+    const hovered = focus ?? hover;
 
     for (const p of planets) {
       const at = toWorld(p);
@@ -169,7 +174,7 @@
         new THREE.MeshStandardMaterial({
           color,
           emissive: color,
-          emissiveIntensity: selected ? 0.9 : p.id === hover ? 0.6 : 0.25,
+          emissiveIntensity: selected || p.id === focus ? 0.9 : p.id === hovered ? 0.6 : 0.25,
           roughness: 0.5,
         }),
       );
@@ -183,6 +188,17 @@
         const ring = new THREE.Mesh(
           new THREE.TorusGeometry(radius(p) + 0.14, 0.03, 8, 40),
           new THREE.MeshBasicMaterial({ color: 0xe6e9f2 }),
+        );
+        ring.position.copy(at);
+        ring.lookAt(camera.position);
+        rings.push(ring);
+        dynamic.add(ring);
+      }
+      if (p.id === focus) {
+        // A wide accent ring, so the browsed planet stands out in the cube.
+        const ring = new THREE.Mesh(
+          new THREE.TorusGeometry(radius(p) + 0.32 * unit, 0.05 * unit, 8, 48),
+          new THREE.MeshBasicMaterial({ color: 0x7cc4ff }),
         );
         ring.position.copy(at);
         ring.lookAt(camera.position);
@@ -207,7 +223,7 @@
 
       // Labels are screen-space, so they stay upright and readable however
       // the cube is turned.
-      const tag = label(p.name, p.owner === seat ? "tag mine" : "tag", p.ships);
+      const tag = label(p.name, (p.owner === seat ? "tag mine" : "tag") + (p.id === focus ? " focus" : ""), p.ships);
       tag.position.copy(at);
       dynamic.add(tag);
     }
@@ -261,7 +277,7 @@
       dynamic.add(cone);
     }
 
-    const target = dest ?? (source !== null && hover !== source ? hover : null);
+    const target = dest ?? (source !== null && hovered !== source ? hovered : null);
     if (source !== null && target !== null) {
       const a = toWorld(planets[source]);
       const b = toWorld(planets[target]);
@@ -280,7 +296,7 @@
 
   // Rebuild whenever anything shown changes.
   $effect(() => {
-    void [planets, fleets, round, source, dest, hover, seat, shownOwner];
+    void [planets, fleets, round, source, dest, hover, focus, seat, shownOwner];
     rebuild();
   });
 
@@ -860,6 +876,11 @@
   }
   .board3d :global(.tag.mine) {
     color: var(--accent);
+  }
+  .board3d :global(.tag.focus) {
+    font-size: 14px;
+    color: #7cc4ff;
+    z-index: 1;
   }
   .board3d :global(.tag.aim) {
     font-weight: 400;

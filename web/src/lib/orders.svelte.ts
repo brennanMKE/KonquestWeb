@@ -11,6 +11,8 @@ class Orders {
   dest = $state<number | null>(null);
   ships = $state(0);
   hover = $state<number | null>(null);
+  /** The planet browsed in the order bar (keyboard or gamepad). */
+  focus = $state<number | null>(null);
   shipInput = $state<HTMLInputElement | null>(null);
 
   // Measure tool: pick two planets to see the distance and travel time.
@@ -30,7 +32,8 @@ class Orders {
     return this.dest !== null ? this.view.planets[this.dest] : null;
   }
   get infoPlanet() {
-    return this.hover !== null ? this.view.planets[this.hover] : (this.dstPlanet ?? this.srcPlanet);
+    const id = this.hover ?? this.focus;
+    return id !== null ? this.view.planets[id] : (this.dstPlanet ?? this.srcPlanet);
   }
   /** Something Esc would cancel. */
   get busy() {

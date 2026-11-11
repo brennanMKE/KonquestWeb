@@ -9,6 +9,7 @@ test("after sending, no planet stays picked", async ({ page }) => {
   await page.getByRole("button", { name: "Start game" }).click();
   await expect(page.getByText("Your turn")).toBeVisible();
 
+  await expect(page.locator("circle.focus")).toHaveCount(0);
   const home = page.locator(".planet.mine").first();
   await home.dispatchEvent("click");
   await expect(page.getByText(/^Sending from/)).toBeVisible();
@@ -20,6 +21,8 @@ test("after sending, no planet stays picked", async ({ page }) => {
 
   await expect(page.getByText("Pick one of your planets to send a fleet from.")).toBeVisible();
   await expect(page.getByText(`Sending from ${name}`)).toHaveCount(0);
+  // A mouse player never sees the keyboard bar's highlight on the map.
+  await expect(page.locator("circle.focus")).toHaveCount(0);
   await expect(page.getByLabel("Ships to send")).toHaveCount(0);
 });
 

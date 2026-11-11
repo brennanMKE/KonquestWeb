@@ -69,9 +69,11 @@
     if (step !== "from" && step !== "to") return;
     if (!list.some((p) => p.id === browse)) browse = list[0]?.id ?? null;
   });
-  // The map highlights it, and the side panel shows its details.
+  // The map highlights it, and the side panel shows its details, but only
+  // while the bar is showing: a mouse player never sees the bar, and its
+  // cursor must not highlight planets they didn't point at.
   $effect(() => {
-    orders.focus = step === "from" || step === "to" ? browse : null;
+    orders.focus = visible && store.myTurn && (step === "from" || step === "to") ? browse : null;
     return () => {
       orders.focus = null;
     };

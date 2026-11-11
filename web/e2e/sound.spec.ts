@@ -73,3 +73,13 @@ test("audio that says it's running with its clock stopped is replaced", async ({
   await expect.poll(contexts).toBe(2);
   await expect(page.locator("button.sound")).toHaveAttribute("data-audio", "running");
 });
+
+test("Create game plays a sound at once", async ({ page }) => {
+  await countSounds(page);
+  await page.goto("/");
+  await page.getByLabel("Your name").fill("Ann");
+  expect(await sounds(page)).toBe(0);
+  await page.getByRole("button", { name: "Create game" }).click();
+  await expect.poll(() => sounds(page)).toBeGreaterThan(0);
+  await expect(page.getByRole("button", { name: "Add computer" })).toBeVisible();
+});

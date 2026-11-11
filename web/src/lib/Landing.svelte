@@ -1,5 +1,6 @@
 <script lang="ts">
   import { load, nameKey, replayFiles, save, store } from "./store.svelte";
+  import { playOnClick } from "./audio";
   import DemoBackdrop from "./DemoBackdrop.svelte";
 
   interface Props {
@@ -40,6 +41,7 @@
   }
 
   async function create() {
+    playOnClick("start");
     busy = true;
     error = "";
     try {

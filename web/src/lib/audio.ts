@@ -192,6 +192,15 @@ export async function testSound(): Promise<AudioStatus> {
   return s;
 }
 
+/** Plays a sound from a click handler. The click has already asked the
+ * browser to start audio (the capture listener below); this waits for that,
+ * then plays. It respects "Sound off". */
+export async function playOnClick(name: Sound): Promise<AudioStatus> {
+  const s = await unlockAudio();
+  if (s === "running") play(name);
+  return s;
+}
+
 // Browsers suspend audio in a hidden tab or across sleep, and Safari can
 // come back from that "running" but silent (WebKit bugs 276687, 281566).
 // So suspend it ourselves when the tab hides, and resume shortly after it
@@ -302,6 +311,12 @@ const A3 = 220.0,
 // --- Sounds ------------------------------------------------------------------
 
 const SOUNDS = {
+  /** A game is created or joined: a rising arpeggio, so a player knows at
+   * once whether sound works. */
+  start: () => {
+    notes([C5, E5, G5, C6], 0.08, { type: "triangle", vol: 0.2, len: 0.3 });
+    notes([C4, G4], 0.16, { type: "sine", vol: 0.15, len: 0.4 });
+  },
   /** It's your turn: a bright two-note chime. */
   turn: () => notes([G5, C6], 0.09, { type: "triangle", vol: 0.18, len: 0.25 }),
   /** A fleet leaves: an engine whoosh rising away. */
@@ -372,6 +387,7 @@ const PRIORITY: Sound[] = [
   "repelled",
   "reinforced",
   "turn",
+  "start",
   "launch",
   "boom",
   "shot",

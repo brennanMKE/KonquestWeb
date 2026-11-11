@@ -74,12 +74,20 @@ test("audio that says it's running with its clock stopped is replaced", async ({
   await expect(page.locator("button.sound")).toHaveAttribute("data-audio", "running");
 });
 
-test("Create game plays a sound at once", async ({ page }) => {
-  await countSounds(page);
+test("Create game plays the start chime at once", async ({ page }) => {
+  await page.addInitScript(() => {
+    const w = window as unknown as { chimes: number };
+    w.chimes = 0;
+    const orig = HTMLMediaElement.prototype.play;
+    HTMLMediaElement.prototype.play = function () {
+      w.chimes++;
+      return orig.call(this);
+    };
+  });
   await page.goto("/");
   await page.getByLabel("Your name").fill("Ann");
-  expect(await sounds(page)).toBe(0);
+  await expect(page.locator("button.sound")).toBeVisible();
   await page.getByRole("button", { name: "Create game" }).click();
-  await expect.poll(() => sounds(page)).toBeGreaterThan(0);
+  await expect.poll(() => page.evaluate(() => (window as unknown as { chimes: number }).chimes)).toBe(1);
   await expect(page.getByRole("button", { name: "Add computer" })).toBeVisible();
 });

@@ -98,6 +98,18 @@ export function unlockAudio(e?: Event | "retry"): Promise<AudioStatus> {
   }
   if (!ac && !createContext()) return Promise.resolve(audioStatus());
   const ctx = ac!;
+  // Starting a node inside the gesture is what WebKit counts as the page
+  // using audio; resume() alone hasn't always been enough.
+  if (gesture) {
+    try {
+      const s = ctx.createBufferSource();
+      s.buffer = ctx.createBuffer(1, 1, ctx.sampleRate);
+      s.connect(ctx.destination);
+      s.start();
+    } catch {
+      // Only a nudge.
+    }
+  }
   if (ctx.state === "running") {
     // Safari can report running while playing nothing; check its clock.
     if (gesture) checkClock(ctx);
@@ -192,13 +204,59 @@ export async function testSound(): Promise<AudioStatus> {
   return s;
 }
 
-/** Plays a sound from a click handler. The click has already asked the
- * browser to start audio (the capture listener below); this waits for that,
- * then plays. It respects "Sound off". */
-export async function playOnClick(name: Sound): Promise<AudioStatus> {
-  const s = await unlockAudio();
-  if (s === "running") play(name);
-  return s;
+// The start chime plays through an <audio> element, not Web Audio: it's a
+// separate path through the browser, so it can be heard even if Safari's
+// Web Audio output is silent (WebKit bugs 276687, 291892). Hearing the
+// chime but no game sounds points at Web Audio; hearing neither points at
+// the volume, the output device or a muted tab.
+let chimeUrl = "";
+function chimeWav(): string {
+  if (chimeUrl) return chimeUrl;
+  const rate = 44100;
+  const n = Math.round(rate * 0.9);
+  const buf = new Float32Array(n);
+  const add = (freq: number, at: number, len: number, vol: number, harmonic: number) => {
+    const start = Math.round(at * rate);
+    const end = Math.min(n, start + Math.round(len * rate));
+    for (let i = start; i < end; i++) {
+      const t = (i - start) / rate;
+      const e = Math.min(1, t / 0.005) * Math.exp((-5 * t) / len);
+      const w = 2 * Math.PI * freq * t;
+      buf[i] += vol * e * (Math.sin(w) + harmonic * Math.sin(3 * w));
+    }
+  };
+  [523.3, 659.3, 784.0, 1046.5].forEach((f, i) => add(f, i * 0.08, 0.3, 0.22, 0.15));
+  [261.6, 392.0].forEach((f, i) => add(f, i * 0.16, 0.45, 0.2, 0));
+  const bytes = new DataView(new ArrayBuffer(44 + n * 2));
+  const str = (o: number, v: string) => [...v].forEach((c, i) => bytes.setUint8(o + i, c.charCodeAt(0)));
+  str(0, "RIFF");
+  bytes.setUint32(4, 36 + n * 2, true);
+  str(8, "WAVEfmt ");
+  bytes.setUint32(16, 16, true);
+  bytes.setUint16(20, 1, true); // PCM
+  bytes.setUint16(22, 1, true); // mono
+  bytes.setUint32(24, rate, true);
+  bytes.setUint32(28, rate * 2, true);
+  bytes.setUint16(32, 2, true);
+  bytes.setUint16(34, 16, true);
+  str(36, "data");
+  bytes.setUint32(40, n * 2, true);
+  for (let i = 0; i < n; i++) bytes.setInt16(44 + i * 2, Math.max(-1, Math.min(1, buf[i])) * 0x7fff, true);
+  chimeUrl = URL.createObjectURL(new Blob([bytes.buffer], { type: "audio/wav" }));
+  return chimeUrl;
+}
+
+/** Plays the start chime. Call it straight from a click handler, before any
+ * await: browsers only let a gesture start playback. Respects "Sound off". */
+export function startChime() {
+  if (!enabled) return;
+  try {
+    const a = new Audio(chimeWav());
+    a.volume = 0.8;
+    a.play().catch((err: Error) => console.warn(`Parallax: the browser wouldn't play the start chime: ${err.message}`));
+  } catch (err) {
+    console.warn(`Parallax: couldn't play the start chime: ${(err as Error).message}`);
+  }
 }
 
 // Browsers suspend audio in a hidden tab or across sleep, and Safari can
@@ -311,12 +369,6 @@ const A3 = 220.0,
 // --- Sounds ------------------------------------------------------------------
 
 const SOUNDS = {
-  /** A game is created or joined: a rising arpeggio, so a player knows at
-   * once whether sound works. */
-  start: () => {
-    notes([C5, E5, G5, C6], 0.08, { type: "triangle", vol: 0.2, len: 0.3 });
-    notes([C4, G4], 0.16, { type: "sine", vol: 0.15, len: 0.4 });
-  },
   /** It's your turn: a bright two-note chime. */
   turn: () => notes([G5, C6], 0.09, { type: "triangle", vol: 0.18, len: 0.25 }),
   /** A fleet leaves: an engine whoosh rising away. */
@@ -387,7 +439,6 @@ const PRIORITY: Sound[] = [
   "repelled",
   "reinforced",
   "turn",
-  "start",
   "launch",
   "boom",
   "shot",

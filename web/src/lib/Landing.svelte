@@ -1,6 +1,7 @@
 <script lang="ts">
   import { load, nameKey, replayFiles, save, store } from "./store.svelte";
-  import { playOnClick } from "./audio";
+  import { startChime } from "./audio";
+  import SoundToggle from "./SoundToggle.svelte";
   import DemoBackdrop from "./DemoBackdrop.svelte";
 
   interface Props {
@@ -41,7 +42,7 @@
   }
 
   async function create() {
-    playOnClick("start");
+    startChime();
     busy = true;
     error = "";
     try {
@@ -90,6 +91,7 @@
     e.preventDefault();
     const c = code.trim().toUpperCase();
     if (!c) return;
+    startChime();
     busy = true;
     error = "";
     try {
@@ -149,9 +151,13 @@
   {/if}
 
   {#if error}<p class="error">{error}</p>{/if}
+  <div class="sound-row"><SoundToggle /></div>
 </main>
 
 <style>
+  .sound-row {
+    margin-top: 0.5rem;
+  }
   .gone {
     margin: 0;
     color: var(--muted);

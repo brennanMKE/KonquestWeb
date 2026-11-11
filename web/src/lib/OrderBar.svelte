@@ -114,9 +114,8 @@
       case "send": {
         const from = orders.source;
         orders.confirm();
-        // The source stays picked while it has ships left: on to its next
-        // destination, from the top of the list. Otherwise browse from it.
-        browse = orders.source === null ? from : null;
+        // Nothing stays picked; the list's cursor starts back at the source.
+        browse = from;
         break;
       }
     }

@@ -68,10 +68,7 @@ test("orders with the arrow keys: from, to, ships, send", async ({ page }) => {
   await page.keyboard.press("ArrowRight");
   await page.keyboard.press("Enter");
   await expect(page.getByText(new RegExp(`Fleet of ${all - 6} sent from ${home} to ${target}`))).toBeVisible();
-  // The source stays picked, ready for its next destination.
-  await expect(bar).toHaveAttribute("data-step", "to");
-  await expect(bar.locator(".slot").first()).toContainText(home);
-  await page.keyboard.press("ArrowLeft"); // let it go
+  // Nothing stays picked; the cursor is back on the source.
   await expect(bar).toHaveAttribute("data-step", "from");
   await expect(bar.locator(".item.on .name")).toHaveText(home);
 

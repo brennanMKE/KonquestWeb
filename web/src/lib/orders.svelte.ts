@@ -100,10 +100,9 @@ class Orders {
     // this one.
     const src = this.view.planets[this.source];
     if (src.ships !== undefined) src.ships -= n;
-    // The source stays picked for the next destination while it has ships
-    // left; picking it again lets it go.
+    // Sent: nothing stays picked. The next order starts fresh.
     this.dest = null;
-    if (n >= max) this.source = null;
+    this.source = null;
   };
 
   endTurn = () => {

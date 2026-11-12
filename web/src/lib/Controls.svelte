@@ -120,7 +120,7 @@
       {#if popped}<p class="hint">Click planets on the map, or type their letters here.</p>{/if}
     {/if}
     {#if store.myTurn}
-      <button class="primary end" onclick={orders.endTurn}>End turn</button>
+      <button class="primary end" onclick={orders.endTurn} title="End turn (Shift+Enter)">End turn</button>
     {/if}
     <button class="measure" class:on={orders.measuring} onclick={orders.toggleMeasure}>
       {orders.measuring ? "Stop measuring" : "Measure distance"}

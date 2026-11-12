@@ -11,8 +11,8 @@
 
   let view = $derived(store.view!);
 
-  // The bar shows once someone uses the arrow keys or a gamepad, and stays
-  // until closed; mouse players never see it.
+  // The bar shows once a gamepad is used, and stays until closed; keyboard
+  // and mouse players never see it.
   let active = $state(false);
   let visible = $derived(active || pads.connected);
   let speed = $derived(view.settings.shipSpeed);
@@ -216,10 +216,21 @@
     End: "end",
   };
   export function key(e: KeyboardEvent): boolean {
-    // Shift+Enter ends the turn, like Start on a gamepad.
-    const a = e.key === "Enter" && e.shiftKey ? "end" : KEYS[e.key];
-    if (!a || e.metaKey || e.ctrlKey || e.altKey) return false;
+    if (e.metaKey || e.ctrlKey || e.altKey) return false;
     const tag = (e.target as HTMLElement)?.tagName;
+    // Shift+Enter ends the turn at once, with no bar and no second press
+    // (not while typing a ship count: Enter sends that order).
+    if (e.key === "Enter" && e.shiftKey && !e.repeat && tag !== "INPUT" && tag !== "TEXTAREA" && tag !== "SELECT") {
+      if (!store.myTurn) return false;
+      e.preventDefault();
+      orders.endTurn();
+      return true;
+    }
+    // The other keys drive the bar only while a gamepad has it up; the
+    // keyboard alone never opens it.
+    if (!visible) return false;
+    const a = KEYS[e.key];
+    if (!a) return false;
     if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA" || (tag === "BUTTON" && (a === "select" || a === "sort"))) return false;
     let edge: PadEdge = "press";
     const now = performance.now();
@@ -252,7 +263,7 @@
   let hints = $derived(
     pads.connected
       ? "D-pad choose · A select · B back · X sort · LB/RB half/all · Start twice ends the turn"
-      : "↑↓ choose · Enter or → select · ← back · Space sort · hold ↑↓ for 5 ships · Shift+Enter twice ends the turn",
+      : "↑↓ choose · Enter or → select · ← back · Space sort · hold ↑↓ for 5 ships · Shift+Enter ends the turn",
   );
 </script>
 

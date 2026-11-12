@@ -15,67 +15,14 @@ async function startGame(page: Page) {
 
 const shipsOf = async (page: Page) => Number((await page.locator(".bar .count b").textContent()) ?? "0");
 
-test("orders with the arrow keys: from, to, ships, send", async ({ page }) => {
+test("the keyboard never opens the order bar, and Shift+Enter ends the turn at once", async ({ page }) => {
   await startGame(page);
   const bar = page.locator(".bar");
-  await expect(bar).toHaveCount(0); // mouse players never see it
-  await page.keyboard.press("ArrowDown"); // the first press brings it up
-  await expect(bar).toHaveAttribute("data-step", "from");
-  // The highlighted planet is ringed on the map, with its details in the bar.
-  await expect(page.locator(".board circle.focus")).toHaveCount(1);
-  await expect(bar.locator(".detail")).toContainText("production");
-  const home = (await bar.locator(".item.on .name").textContent())!;
-
-  await page.keyboard.press("ArrowRight");
-  await expect(bar).toHaveAttribute("data-step", "to");
-  await expect(bar.locator(".head")).toContainText(`To, from ${home}`);
-  // Nearest first; scrolling moves the highlight and the ring.
-  const first = await bar.locator(".item.on .name").textContent();
-  await page.keyboard.press("ArrowDown");
-  await expect(bar.locator(".item.on .name")).not.toHaveText(first!);
-  // Left goes back to change the source, right comes forward again.
-  await page.keyboard.press("ArrowLeft");
-  await expect(bar).toHaveAttribute("data-step", "from");
-  await expect(bar.locator(".item.on .name")).toHaveText(home);
-  await page.keyboard.press("Enter");
-  await expect(bar).toHaveAttribute("data-step", "to");
-  // Sorting changes the order's name.
-  await page.keyboard.press(" ");
-  await expect(bar.locator(".sort")).toHaveText("Weakest");
-  const target = (await bar.locator(".item.on .name").textContent())!;
-  await page.keyboard.press("Enter");
-  await expect(bar).toHaveAttribute("data-step", "ships");
-  await expect(bar.locator(".slot").nth(1)).toContainText(target);
-
-  // A tap is 1 ship; holding is 5 at a time.
-  const all = await shipsOf(page);
-  expect(all).toBeGreaterThan(7); // a home planet starts with 10
-  await page.keyboard.press("ArrowDown");
-  expect(await shipsOf(page)).toBe(all - 1);
-  await page.keyboard.down("ArrowDown");
-  await page.waitForTimeout(450);
-  await page.evaluate(() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", repeat: true })));
-  await page.keyboard.up("ArrowDown");
-  expect(await shipsOf(page)).toBe(all - 7); // the press, then 5 for the hold
-  await page.keyboard.press("ArrowUp");
-  expect(await shipsOf(page)).toBe(all - 6);
-
-  // Lock it in, then Send.
-  await page.keyboard.press("Enter");
-  await expect(bar).toHaveAttribute("data-step", "send");
-  await page.keyboard.press("ArrowLeft");
-  await expect(bar).toHaveAttribute("data-step", "ships");
-  await page.keyboard.press("ArrowRight");
-  await page.keyboard.press("Enter");
-  await expect(page.getByText(new RegExp(`Fleet of ${all - 6} sent from ${home} to ${target}`))).toBeVisible();
-  // Nothing stays picked; the cursor is back on the source.
-  await expect(bar).toHaveAttribute("data-step", "from");
-  await expect(bar.locator(".item.on .name")).toHaveText(home);
-
-  // Shift+Enter twice ends the turn, no mouse needed.
+  for (const k of ["ArrowDown", "ArrowRight", "Enter", " "]) await page.keyboard.press(k);
+  await expect(bar).toHaveCount(0);
+  await expect(page.locator(".board circle.focus")).toHaveCount(0);
   await page.keyboard.press("Shift+Enter");
-  await expect(bar.locator(".hints")).toContainText("again to end your turn");
-  await page.keyboard.press("Shift+Enter");
+  await expect(bar).toHaveCount(0);
   await expect(page.getByText("Round 2", { exact: false }).first()).toBeVisible();
 });
 

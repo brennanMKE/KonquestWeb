@@ -2,6 +2,7 @@
   import { load, nameKey, replayFiles, save, store } from "./store.svelte";
   import { startChime } from "./audio";
   import SoundToggle from "./SoundToggle.svelte";
+  import AudioPanel from "./AudioPanel.svelte";
   import DemoBackdrop from "./DemoBackdrop.svelte";
 
   interface Props {
@@ -151,7 +152,7 @@
   {/if}
 
   {#if error}<p class="error">{error}</p>{/if}
-  <div class="sound-row"><SoundToggle /></div>
+  <div class="sound-row"><SoundToggle /> <AudioPanel /></div>
 </main>
 
 <style>

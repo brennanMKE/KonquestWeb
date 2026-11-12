@@ -2,6 +2,7 @@
   import { load, save, store } from "./store.svelte";
   import { unlockAudio } from "./audio";
   import SoundToggle from "./SoundToggle.svelte";
+  import AudioPanel from "./AudioPanel.svelte";
   import { ownerColor } from "./colors";
   import { playerType } from "./proto";
   import { orders } from "./orders.svelte";
@@ -112,6 +113,7 @@
     {/if}
     <span class="spacer"></span>
     <SoundToggle />
+    <AudioPanel />
     {#if store.isHost || store.phase === "over"}
       <a class="save" href="/api/rooms/{store.room}/save?token={store.token}" download>Save game</a>
     {/if}

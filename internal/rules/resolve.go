@@ -13,7 +13,11 @@ const (
 	EvCaptured   EventKind = "captured"
 	EvHeld       EventKind = "held"
 	EvEliminated EventKind = "eliminated"
-	EvGameOver   EventKind = "game_over"
+	// EvFallen: a player lost their last planet but still has fleets in
+	// flight. EvRisen: a player with no planets took one.
+	EvFallen   EventKind = "fallen"
+	EvRisen    EventKind = "risen"
+	EvGameOver EventKind = "game_over"
 )
 
 // Event is one entry in the turn log.
@@ -23,7 +27,8 @@ type Event struct {
 	// Planet is the planet involved, or -1.
 	Planet int `json:"planet"`
 	// Attacker is the fleet's owner (reinforced, captured, held), the
-	// eliminated seat, or the winner (game_over, -1 for none).
+	// eliminated, fallen or risen seat, or the winner (game_over, -1 for
+	// none).
 	Attacker int `json:"attacker"`
 	// Defender is the planet's owner before the battle (may be Neutral).
 	Defender int `json:"defender"`
@@ -58,9 +63,11 @@ func (g *Game) resolve() []Event {
 	}
 	g.st.Fleets = staying
 	slices.SortFunc(arriving, func(a, b Fleet) int { return a.ID - b.ID })
+	before := g.planetCounts()
 	for _, f := range arriving {
 		events = append(events, g.arrive(f))
 	}
+	events = append(events, g.fallenAndRisen(r, before, events)...)
 
 	for i := range g.st.Planets {
 		p := &g.st.Planets[i]
@@ -100,6 +107,45 @@ func (g *Game) resolve() []Event {
 		events = append(events, Event{Kind: EvGameOver, Round: r, Planet: -1, Attacker: g.st.Winner, Defender: Neutral})
 	}
 	return events
+}
+
+// planetCounts is how many planets each seat owns.
+func (g *Game) planetCounts() []int {
+	n := make([]int, len(g.st.Players))
+	for _, p := range g.st.Planets {
+		if p.Owner >= 0 && p.Owner < len(n) {
+			n[p.Owner]++
+		}
+	}
+	return n
+}
+
+// fallenAndRisen reports the seats that lost their last planet this round
+// while fleets of theirs are still in flight (with none left, elimination
+// says it), and the seats that had no planet and took one. Everyone sees
+// both. A risen event names the first planet taken.
+func (g *Game) fallenAndRisen(r int, before []int, arrivals []Event) []Event {
+	after := g.planetCounts()
+	var out []Event
+	for seat := range g.st.Players {
+		if !g.st.Players[seat].Alive {
+			continue
+		}
+		switch {
+		case before[seat] > 0 && after[seat] == 0 && g.hasAssets(seat):
+			out = append(out, Event{Kind: EvFallen, Round: r, Planet: -1, Attacker: seat, Defender: Neutral})
+		case before[seat] == 0 && after[seat] > 0:
+			planet := -1
+			for _, e := range arrivals {
+				if e.Kind == EvCaptured && e.Attacker == seat {
+					planet = e.Planet
+					break
+				}
+			}
+			out = append(out, Event{Kind: EvRisen, Round: r, Planet: planet, Attacker: seat, Defender: Neutral})
+		}
+	}
+	return out
 }
 
 func (g *Game) hasAssets(seat int) bool {

@@ -2,8 +2,14 @@
 // filtered noise; there are no audio files. The primitives follow System 1
 // Arcade's audio module (same author, MIT).
 
+import { loadVolume, saveSetting, wavUrl } from "./wav";
+
 const STORE_KEY = "parallax.sound";
+const VOLUME_KEY = "parallax.soundVolume";
 const MAX_AT_ONCE = 4;
+// The effects' loudest level; the player's volume scales it.
+const FULL = 0.35;
+let volume = loadVolume(VOLUME_KEY, 1);
 
 let enabled = true;
 try {
@@ -64,6 +70,14 @@ function notify() {
 }
 
 export const soundOn = () => enabled;
+export const soundVolume = () => volume;
+
+/** Sets the effects' volume, 0 to 1. */
+export function setSoundVolume(v: number) {
+  volume = Math.max(0, Math.min(1, v));
+  saveSetting(VOLUME_KEY, String(volume));
+  if (out && ac) out.gain.setTargetAtTime(FULL * volume, ac.currentTime, 0.02);
+}
 
 export function setSound(on: boolean) {
   enabled = on;
@@ -159,7 +173,7 @@ function createContext(): boolean {
   const comp = ac.createDynamicsCompressor();
   comp.connect(ac.destination);
   out = ac.createGain();
-  out.gain.value = 0.35;
+  out.gain.value = FULL * volume;
   out.connect(comp);
   noiseBuf = ac.createBuffer(1, ac.sampleRate, ac.sampleRate);
   const d = noiseBuf.getChannelData(0);
@@ -227,22 +241,7 @@ function chimeWav(): string {
   };
   [523.3, 659.3, 784.0, 1046.5].forEach((f, i) => add(f, i * 0.08, 0.3, 0.22, 0.15));
   [261.6, 392.0].forEach((f, i) => add(f, i * 0.16, 0.45, 0.2, 0));
-  const bytes = new DataView(new ArrayBuffer(44 + n * 2));
-  const str = (o: number, v: string) => [...v].forEach((c, i) => bytes.setUint8(o + i, c.charCodeAt(0)));
-  str(0, "RIFF");
-  bytes.setUint32(4, 36 + n * 2, true);
-  str(8, "WAVEfmt ");
-  bytes.setUint32(16, 16, true);
-  bytes.setUint16(20, 1, true); // PCM
-  bytes.setUint16(22, 1, true); // mono
-  bytes.setUint32(24, rate, true);
-  bytes.setUint32(28, rate * 2, true);
-  bytes.setUint16(32, 2, true);
-  bytes.setUint16(34, 16, true);
-  str(36, "data");
-  bytes.setUint32(40, n * 2, true);
-  for (let i = 0; i < n; i++) bytes.setInt16(44 + i * 2, Math.max(-1, Math.min(1, buf[i])) * 0x7fff, true);
-  chimeUrl = URL.createObjectURL(new Blob([bytes.buffer], { type: "audio/wav" }));
+  chimeUrl = wavUrl(buf, rate);
   return chimeUrl;
 }
 
@@ -252,7 +251,7 @@ export function startChime() {
   if (!enabled) return;
   try {
     const a = new Audio(chimeWav());
-    a.volume = 0.8;
+    a.volume = 0.8 * volume;
     a.play().catch((err: Error) => console.warn(`Parallax: the browser wouldn't play the start chime: ${err.message}`));
   } catch (err) {
     console.warn(`Parallax: couldn't play the start chime: ${(err as Error).message}`);

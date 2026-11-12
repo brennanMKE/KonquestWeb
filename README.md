@@ -121,6 +121,14 @@ In the lobby, add three computers, tick **Watch only**, and start. The computer 
 so you can follow each move (set it higher if you like). With no human playing you see everything:
 every fleet, every planet's stats and every battle, replayed in 3D each round.
 
+## Sound, music and the announcer
+
+The **Audio** menu has a switch and a volume for each: sound effects, background music (off at first) and the
+announcer. The announcer speaks only the big moments, after their battles have played: a faction that has **fallen**
+(its last planet lost, fleets still in flight), one that has **risen** again (it took a planet back with those
+fleets), one destroyed, and the winner. It uses the browser's own speech. The music is generated in the browser, a slow
+ambient loop. The browser remembers the settings.
+
 ## Keys and gamepads
 
 **Shift+Enter** ends your turn. Letter keys pick planets, and Esc cancels an order.

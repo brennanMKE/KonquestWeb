@@ -8,6 +8,8 @@
   import Board from "./Board.svelte";
   import Standings from "./Standings.svelte";
   import SoundToggle from "./SoundToggle.svelte";
+  import AudioPanel from "./AudioPanel.svelte";
+  import { say } from "./voice";
 
   let { onclose }: { onclose: () => void } = $props();
 
@@ -60,12 +62,22 @@
     } else {
       battles = null;
       animating = false;
+      if (animate && index > 0) announce(frames[index].events);
     }
   }
   function battlesDone(round: number) {
     if (battles && round === battles.round) {
       clearTimeout(fallback);
       animating = false;
+      announce(battles.events);
+    }
+  }
+  // The announcer speaks a round's big moments when it's played forward:
+  // after its battles, when they're shown.
+  function announce(events: GameEvent[]) {
+    for (const e of events) {
+      const line = store.announcement(e, SPECTATOR);
+      if (line) say(line);
     }
   }
   $effect(() => () => clearTimeout(fallback));
@@ -190,7 +202,7 @@
       if (d) {
         out.push({
           text: d.text,
-          big: e.kind === "captured" || e.kind === "eliminated" || e.kind === "game_over",
+          big: e.kind === "captured" || e.kind === "eliminated" || e.kind === "fallen" || e.kind === "risen" || e.kind === "game_over",
           color: e.attacker >= 0 ? ownerColor(e.attacker) : undefined,
         });
       }
@@ -224,6 +236,7 @@
       </span>
     {/each}
     <SoundToggle />
+    <AudioPanel />
     {#if downloadHref}
       <a class="download" href={downloadHref} download={downloadName}>Download game</a>
     {/if}

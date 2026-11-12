@@ -70,7 +70,7 @@ export interface View {
   winner: number;
 }
 
-export type EventKind = "reinforced" | "captured" | "held" | "eliminated" | "game_over";
+export type EventKind = "reinforced" | "captured" | "held" | "eliminated" | "fallen" | "risen" | "game_over";
 
 export interface GameEvent {
   kind: EventKind;

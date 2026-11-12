@@ -832,3 +832,45 @@ func TestCubeFillsTheVolume(t *testing.T) {
 		}
 	}
 }
+
+func TestFallenAndRisen(t *testing.T) {
+	// Seat 1 sends its ships off its home, then loses the home: fallen.
+	// Its fleet then takes an empty neutral planet: risen.
+	planets := []Planet{
+		{Pos: Pos{0, 0, 0}, Owner: 0, Ships: 10, Production: 1, Kill: 1},
+		{Pos: Pos{2, 0, 0}, Owner: 1, Ships: 9, Production: 1, Kill: 1},
+		{Pos: Pos{2, 4, 0}, Owner: Neutral, Ships: 0, Production: 1, Kill: 0.1},
+		{Pos: Pos{0, 9, 0}, Owner: 2, Ships: 1, Production: 1, Kill: 0.1},
+	}
+	s := DefaultSettings()
+	s.Width = 32
+	g := testGame(t, 3, s, planets)
+	must(g.Launch(0, 0, 1, 10)) // takes B this round
+	must(g.EndTurn(0))
+	must(g.Launch(1, 1, 2, 9)) // takes C later
+	must(g.EndTurn(1))
+	evs := must(g.EndTurn(2))
+	var fallen []Event
+	for _, e := range evs {
+		if e.Kind == EvFallen {
+			fallen = append(fallen, e)
+		}
+	}
+	if len(fallen) != 1 || fallen[0].Attacker != 1 || !fallen[0].VisibleTo(0) || !fallen[0].VisibleTo(2) {
+		t.Fatalf("fallen = %+v in %+v", fallen, evs)
+	}
+	for range 20 {
+		for _, e := range endRound(t, g) {
+			switch e.Kind {
+			case EvFallen:
+				t.Fatalf("fallen again: %+v", e)
+			case EvRisen:
+				if e.Attacker != 1 || e.Planet != 2 || !e.VisibleTo(0) {
+					t.Fatalf("risen = %+v", e)
+				}
+				return
+			}
+		}
+	}
+	t.Fatal("seat 1 never rose")
+}

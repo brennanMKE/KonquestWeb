@@ -156,6 +156,10 @@ func describe(e rules.Event, planets []rules.Planet) string {
 			name(), owner(e.Defender), owner(e.Attacker), e.Ships, e.Remaining)
 	case rules.EvEliminated:
 		return fmt.Sprintf("%s has been eliminated.", owner(e.Attacker))
+	case rules.EvFallen:
+		return fmt.Sprintf("%s has fallen: no planets left, fleets still in flight.", owner(e.Attacker))
+	case rules.EvRisen:
+		return fmt.Sprintf("%s has risen again, taking %s.", owner(e.Attacker), name())
 	case rules.EvGameOver:
 		return "The game is over."
 	}

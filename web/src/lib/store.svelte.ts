@@ -5,6 +5,7 @@ import type { ClientMsg, GameEvent, Phase, PlanetView, Replay, SeatInfo, ServerM
 import { NEUTRAL, SPECTATOR } from "./proto";
 import { play, type Sound } from "./audio";
 import { factionOf, planetName } from "./names";
+import { say } from "./voice";
 import type { Faction } from "./names";
 
 export interface LogEntry {
@@ -468,6 +469,25 @@ class Store {
   private addEvent(e: GameEvent) {
     const d = this.describe(e, this.seat);
     if (d) this.addLog(e.round, d.text, d.tone);
+    const line = this.announcement(e, this.seat);
+    if (line) say(line);
+  }
+
+  /** What the announcer says about an event, if anything: only the big moments. */
+  announcement(e: GameEvent, me: number): string | null {
+    const name = (seat: number) => this.faction(seat)?.name ?? this.playerName(seat);
+    switch (e.kind) {
+      case "fallen":
+        return e.attacker === me ? "You have fallen. Your fleets fight on." : `${name(e.attacker)} has fallen.`;
+      case "risen":
+        return e.attacker === me ? "You have risen again!" : `${name(e.attacker)} has risen again!`;
+      case "eliminated":
+        return e.attacker === me ? "You have been destroyed." : `${name(e.attacker)} has been destroyed.`;
+      case "game_over":
+        if (e.attacker < 0) return "The war is over.";
+        return e.attacker === me ? "Victory! The galaxy is yours." : `${name(e.attacker)} rules the galaxy.`;
+    }
+    return null;
   }
 
   /** An event as a log line, from seat's side of it. */
@@ -499,6 +519,16 @@ class Store {
         };
       case "eliminated":
         return { text: e.attacker === me ? "You have been eliminated." : `${who(e.attacker)} has been eliminated.`, tone: e.attacker === me ? "bad" : "info" };
+      case "fallen":
+        return e.attacker === me
+          ? { text: "You have fallen: your last planet is lost. Your fleets in flight fight on.", tone: "bad" }
+          : { text: `${who(e.attacker)} has fallen: no planets left, fleets still in flight.`, tone: "info" };
+      case "risen": {
+        const taken = e.planet >= 0 ? `, taking ${this.planetNameFor(e.planet, e.attacker)}` : "";
+        return e.attacker === me
+          ? { text: `You have risen again${taken}!`, tone: "good" }
+          : { text: `${who(e.attacker)} has risen again${taken}.`, tone: "info" };
+      }
       case "game_over":
         return {
           text: e.attacker < 0 ? "The game is over. No winner." : `The game is over. ${e.attacker === me ? "You win!" : who(e.attacker) + " wins."}`,

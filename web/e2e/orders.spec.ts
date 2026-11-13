@@ -50,9 +50,9 @@ test("ships sent this turn come off the planet at once, even on a slow link", as
   }
   await expect(page.getByText("Your turn")).toBeVisible();
   await expect(page.getByTestId("board-3d")).toHaveAttribute("data-battles", "idle", { timeout: 30000 });
-  const mine = () => page.locator(".board3d .labels .tag.mine").first().textContent();
+  const mine = () => page.locator(".board3d .labels .tag.mine .count").first().textContent();
   slow = true;
-  const before = Number((await mine())!.split(" · ")[1]);
+  const before = Number(await mine());
   const home = page.locator(".sr-only button.mine").first();
   await home.dispatchEvent("click");
   await page.locator(".sr-only button:not(.mine)").first().dispatchEvent("click");

@@ -33,6 +33,12 @@ make shots                         # regenerate the link preview and README imag
 - A fleet arriving at your own planet reinforces it. A fleet arriving anywhere else fights, and if it
   wins it captures the planet.
 - Last empire standing wins.
+- Every planet shows its ships and, after them, what it builds each round (`12 +8`; `+?` when hidden).
+  Pick one of your planets and every other planet shows how many rounds a fleet takes to reach it:
+  a solid ring within 3 rounds, dashed within 5, dotted within 7, and dimmed beyond. "Ranges" on the
+  board turns this off.
+- New maps are fair: the game keeps the most even of several maps from the seed, so no home starts
+  far from everything while another sits among rich planets (see [RULES.md](RULES.md)).
 
 Unlike the original, which is hot-seat only, every player uses their own device, so hidden
 information really is hidden: the server never sends a player data they aren't allowed to see.

@@ -3,6 +3,7 @@
   import { travelTurns } from "./proto";
   import { ownerColor } from "./colors";
   import { territory } from "./territory";
+  import { bandOf, prodLabel, turnsFrom } from "./range";
 
   interface Props {
     planets: PlanetView[];
@@ -22,6 +23,10 @@
     /** Battle replays are a 3D view feature; the map ignores this. */
     replay?: { round: number; events: GameEvent[] } | null;
     onreplaydone?: (round: number) => void;
+    /** Shows rounds from this planet to every other one. */
+    rangeFrom?: number | null;
+    /** Shows each planet's production beside its ships. */
+    stats?: boolean;
   }
 
   let {
@@ -38,7 +43,11 @@
     onpick,
     onhover,
     focus = null,
+    rangeFrom = null,
+    stats = false,
   }: Props = $props();
+
+  let reach = $derived(rangeFrom === null ? null : turnsFrom(planets, rangeFrom, shipSpeed));
 
   let hover = $state<number | null>(null);
 
@@ -137,9 +146,12 @@
 
   {#each ordered as p (p.id)}
     {@const r = radius(p)}
+    {@const turns = reach?.get(p.id)}
+    {@const band = turns === undefined ? null : bandOf(turns)}
     <g
       class="planet"
       class:mine={p.owner === seat}
+      class:far={band === "far"}
       role="button"
       tabindex="-1"
       aria-label="Planet {p.name}"
@@ -159,8 +171,19 @@
       {#if p.letter}
         <text class="title" x={cx(p)} y={cy(p) - r - 0.14}>{p.name}</text>
       {/if}
-      {#if p.ships !== undefined}
-        <text class="ships" x={cx(p)} y={cy(p) + r + 0.2}>{p.ships}</text>
+      {#if band !== null && band !== "far"}
+        <circle class="band b{band}" cx={cx(p)} cy={cy(p)} r={r + 0.17} />
+      {/if}
+      {#if p.ships !== undefined || stats}
+        <text class="ships" x={cx(p)} y={cy(p) + r + (band !== null && band !== "far" ? 0.34 : 0.2)}
+          >{p.ships ?? ""}{#if stats}<tspan class="prod" dx={p.ships === undefined ? 0 : 0.1}>{prodLabel(p)}</tspan>{/if}</text
+        >
+      {/if}
+      {#if turns !== undefined && band !== null}
+        <g class="reach" data-turns={turns} data-band={band}>
+          <rect x={cx(p) - r - 0.56} y={cy(p) - 0.15} width="0.36" height="0.3" rx="0.09" class="b{band}" />
+          <text x={cx(p) - r - 0.38} y={cy(p) + 0.005}>{turns}</text>
+        </g>
       {/if}
       {#if depth > 1}
         <text class="z" x={cx(p) + r * 0.8} y={cy(p) - r * 0.8}>z{p.pos.z}</text>
@@ -228,6 +251,55 @@
     dominant-baseline: central;
     fill: var(--text);
     pointer-events: none;
+  }
+  .prod {
+    fill: var(--muted);
+  }
+  .planet.far {
+    opacity: 0.4;
+  }
+  .band {
+    fill: none;
+    stroke: var(--text);
+    stroke-width: 0.035;
+    pointer-events: none;
+  }
+  .band.b3 {
+    stroke-width: 0.06;
+  }
+  .band.b5 {
+    stroke-dasharray: 0.12 0.07;
+  }
+  .band.b7 {
+    stroke-dasharray: 0.03 0.07;
+    stroke-linecap: round;
+  }
+  .reach {
+    pointer-events: none;
+  }
+  .reach rect {
+    fill: var(--bg);
+    stroke: var(--text);
+    stroke-width: 0.025;
+  }
+  .reach rect.b3 {
+    stroke-width: 0.045;
+  }
+  .reach rect.b5 {
+    stroke-dasharray: 0.08 0.05;
+  }
+  .reach rect.b7 {
+    stroke-dasharray: 0.025 0.05;
+  }
+  .reach rect.bfar {
+    stroke: none;
+  }
+  .reach text {
+    font-size: 0.2px;
+    font-weight: 700;
+    text-anchor: middle;
+    dominant-baseline: central;
+    fill: var(--text);
   }
   .z {
     font-size: 0.19px;

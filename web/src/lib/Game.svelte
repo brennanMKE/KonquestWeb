@@ -36,6 +36,12 @@
     replays = !replays;
     save("parallax.replays", replays ? "on" : "off");
   }
+  // Rounds from the selected planet to every other one, unless turned off.
+  let ranges = $state(load("parallax.ranges") !== "off");
+  function toggleRanges() {
+    ranges = !ranges;
+    save("parallax.ranges", ranges ? "on" : "off");
+  }
   $effect(() => {
     store.playsBattles = view3d && replays;
     // Leaving the 3D view (or turning replays off) ends any wait for one.
@@ -149,6 +155,8 @@
           onpick={orders.pick}
           onhover={(id) => (orders.hover = id)}
           focus={orders.focus}
+          rangeFrom={ranges && !orders.measuring ? orders.source : null}
+          stats
           replay={replays ? store.lastEvents : null}
           onreplaydone={(round) => store.replayDone(round)}
         />
@@ -167,6 +175,9 @@
       <div class="view-toggle">
         <button class="small" onclick={toggleView} title="Switch between the map and a 3D view you can turn">
           {view3d ? "Map view" : "3D view"}
+        </button>
+        <button class="small" onclick={toggleRanges} aria-pressed={ranges} title="When you pick a planet, show how many rounds a fleet takes to every other planet">
+          Ranges {ranges ? "on" : "off"}
         </button>
         {#if view3d}
           <button class="small" onclick={toggleReplays} aria-pressed={replays} title="Play out each round's battles in 3D">

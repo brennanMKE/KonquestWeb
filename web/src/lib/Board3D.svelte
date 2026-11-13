@@ -7,6 +7,7 @@
   import { play } from "./audio";
   import { load, save, soundFor } from "./store.svelte";
   import { travelTurns } from "./proto";
+  import { bandOf, prodLabel, turnsFrom } from "./range";
   import { ownerHex } from "./colors";
   import { territory } from "./territory";
 
@@ -35,6 +36,10 @@
      * sound, and the camera slowly turns the map from the start.
      */
     ambient?: boolean;
+    /** Shows rounds from this planet to every other one. */
+    rangeFrom?: number | null;
+    /** Shows each planet's production beside its ships. */
+    stats?: boolean;
   }
 
   let {
@@ -54,7 +59,11 @@
     replay = null,
     onreplaydone,
     ambient = false,
+    rangeFrom = null,
+    stats = false,
   }: Props = $props();
+
+  let reach = $derived(rangeFrom === null ? null : turnsFrom(planets, rangeFrom, shipSpeed));
 
   // Scenery makes no sound.
   const sfx = (...s: Parameters<typeof play>) => {
@@ -98,7 +107,12 @@
 
   // A label is anchored at a point and drawn in screen space, just right of
   // it, so it stays upright and beside its planet however the map is turned.
-  function label(text: string, cls: string, count?: number): CSS2DObject {
+  function label(
+    text: string,
+    cls: string,
+    count?: number,
+    extra?: { turns?: number; prod?: string },
+  ): CSS2DObject {
     const anchor = document.createElement("div");
     anchor.className = "anchor";
     const el = document.createElement("span");
@@ -110,6 +124,18 @@
       n.className = "count";
       n.textContent = String(count);
       el.append(" · ", n);
+    }
+    if (extra?.prod !== undefined) {
+      const n = document.createElement("span");
+      n.className = "prod";
+      n.textContent = extra.prod;
+      el.append(" ", n);
+    }
+    if (extra?.turns !== undefined) {
+      const t = document.createElement("span");
+      t.className = `turns b${bandOf(extra.turns)}`;
+      t.textContent = String(extra.turns);
+      el.prepend(t, " ");
     }
     anchor.appendChild(el);
     return new CSS2DObject(anchor);
@@ -169,13 +195,17 @@
       const at = toWorld(p);
       const color = new THREE.Color(ownerHex(p.owner));
       const selected = p.id === source || p.id === dest;
+      const turns = reach?.get(p.id);
+      const far = turns !== undefined && bandOf(turns) === "far" && !selected && p.id !== hovered;
       const mesh = new THREE.Mesh(
         sphere,
         new THREE.MeshStandardMaterial({
           color,
           emissive: color,
-          emissiveIntensity: selected || p.id === focus ? 0.9 : p.id === hovered ? 0.6 : 0.25,
+          emissiveIntensity: selected || p.id === focus ? 0.9 : p.id === hovered ? 0.6 : far ? 0.08 : 0.25,
           roughness: 0.5,
+          transparent: far,
+          opacity: far ? 0.45 : 1,
         }),
       );
       mesh.scale.setScalar(radius(p));
@@ -223,7 +253,12 @@
 
       // Labels are screen-space, so they stay upright and readable however
       // the cube is turned.
-      const tag = label(p.name, (p.owner === seat ? "tag mine" : "tag") + (p.id === focus ? " focus" : ""), p.ships);
+      const tag = label(
+        p.name,
+        (p.owner === seat ? "tag mine" : "tag") + (p.id === focus ? " focus" : "") + (far ? " far" : ""),
+        p.ships,
+        { turns, prod: stats ? prodLabel(p) : undefined },
+      );
       tag.position.copy(at);
       dynamic.add(tag);
     }
@@ -296,7 +331,7 @@
 
   // Rebuild whenever anything shown changes.
   $effect(() => {
-    void [shown, shownFleets, round, source, dest, hover, focus, seat];
+    void [shown, shownFleets, round, source, dest, hover, focus, seat, reach, stats];
     rebuild();
   });
 
@@ -930,6 +965,37 @@
   .board3d :global(.tag .count) {
     font-weight: 400;
     color: var(--muted);
+  }
+  .board3d :global(.tag .prod) {
+    font-weight: 400;
+    color: var(--muted);
+  }
+  .board3d :global(.tag.far) {
+    opacity: 0.4;
+  }
+  .board3d :global(.tag .turns) {
+    display: inline-block;
+    min-width: 1.4em;
+    padding: 0 3px;
+    border: 1.5px solid var(--text);
+    border-radius: 7px;
+    background: var(--bg);
+    text-align: center;
+    font-weight: 700;
+    color: var(--text);
+  }
+  .board3d :global(.tag .turns.b3) {
+    border-width: 2.5px;
+  }
+  .board3d :global(.tag .turns.b5) {
+    border-style: dashed;
+  }
+  .board3d :global(.tag .turns.b7) {
+    border-style: dotted;
+  }
+  .board3d :global(.tag .turns.bfar) {
+    border-color: transparent;
+    font-weight: 400;
   }
   .board3d :global(.tag.mine) {
     color: var(--accent);

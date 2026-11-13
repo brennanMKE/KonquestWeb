@@ -95,6 +95,7 @@
     ["blindMap", "Blind map"],
     ["neutralStats", "Show neutral stats"],
     ["captureProducesImmediately", "Captured planets produce at once"],
+    ["fairMap", "Fair starting positions"],
   ];
 </script>
 

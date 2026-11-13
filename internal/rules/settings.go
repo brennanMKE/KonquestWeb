@@ -27,6 +27,10 @@ type Settings struct {
 	CaptureProducesImmediately bool `json:"captureProducesImmediately"`
 	// MaxRounds ends the game after that many rounds; 0 means no limit.
 	MaxRounds int `json:"maxRounds"`
+	// FairMap draws several maps from the seed and keeps the one where the
+	// homes have the most even neighbourhoods. Saves from before it existed
+	// lack the field, so they replay on the map they were played on.
+	FairMap bool `json:"fairMap"`
 }
 
 // DefaultSettings returns the standard room options.
@@ -38,6 +42,7 @@ func DefaultSettings() Settings {
 		Neutrals:     10,
 		ShipSpeed:    2,
 		NeutralStats: true,
+		FairMap:      true,
 	}
 }
 

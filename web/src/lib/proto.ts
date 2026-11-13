@@ -20,6 +20,8 @@ export interface Settings {
   neutralStats: boolean;
   captureProducesImmediately: boolean;
   maxRounds: number;
+  /** Pick the most even of several maps from the seed. */
+  fairMap: boolean;
   aiDelayMs: number;
   turnTimerMs: number;
   disconnectGraceMs: number;

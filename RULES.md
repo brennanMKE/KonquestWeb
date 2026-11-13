@@ -20,6 +20,12 @@ Konquest family of games and from our own choices, never from Konquest source co
   the one whose centre is farthest from the homes already placed. Neutrals take random free sectors.
 - **House rule, names:** after placement the planets are shuffled, then named A, B, C, …, Z, AA, AB, …
   in that order, so a name doesn't reveal who started where.
+- **House rule, fair maps** (`fairMap`, on by default): random neutrals can leave one home with rich
+  planets next door and another with nothing near. So the game draws up to 64 maps from the seed, in
+  order, and keeps the first fair enough, or else the fairest. Each home's reach is the sum, over the
+  neutrals, of production × (1.3 − kill) ÷ travel rounds². Unfairness is the gap between the best and
+  worst reach as a share of the best, plus 0.25 for each round between the soonest and latest first
+  capture; 0.12 or less is fair enough.
 - The whole map comes from the game seed, so the same seed and settings give the same map.
 
 ## Planets
@@ -118,3 +124,4 @@ neutral ones, killed in combat), ships lost, planets conquered and fleets launch
 | `neutralStats` | on | Show neutral stats (when not blind) |
 | `captureProducesImmediately` | off | A captured planet produces in the round it's captured |
 | `maxRounds` | 0 | Round limit (0 = none) |
+| `fairMap` | on | Keep the most even of several maps from the seed (saves from before this option replay with it off) |

@@ -55,7 +55,11 @@ func New(players int, s Settings, seed uint64) (*Game, error) {
 	for i := range g.st.Players {
 		g.st.Players[i] = Player{Seat: i, Alive: true}
 	}
-	g.st.Planets = generateMap(g.rng, players, s)
+	if s.FairMap {
+		g.st.Planets = fairMap(g.rng, players, s)
+	} else {
+		g.st.Planets = generateMap(g.rng, players, s)
+	}
 	return g, nil
 }
 

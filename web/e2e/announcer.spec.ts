@@ -3,9 +3,10 @@ import { expect, test } from "@playwright/test";
 // Records what the page asks the browser to say, and what it plays.
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
-    const w = window as unknown as { spoken: string[]; played: number };
+    const w = window as unknown as { spoken: string[]; played: number; media: HTMLMediaElement[] };
     w.spoken = [];
     w.played = 0;
+    w.media = [];
     if ("speechSynthesis" in window) {
       window.speechSynthesis.speak = (u: SpeechSynthesisUtterance) => {
         if (u.text) w.spoken.push(u.text);
@@ -15,6 +16,7 @@ test.beforeEach(async ({ page }) => {
     const play = HTMLMediaElement.prototype.play;
     HTMLMediaElement.prototype.play = function () {
       w.played++;
+      if (!w.media.includes(this)) w.media.push(this);
       return play.call(this);
     };
   });
@@ -72,4 +74,28 @@ test("the announcer calls a fall and a rise in a replay", async ({ page }) => {
   await expect.poll(() => spoken(page)).toEqual(expect.arrayContaining([expect.stringMatching(/ has fallen\.$/), expect.stringMatching(/ has risen again!$/)]));
   // Only the big moments are spoken: nothing about single battles.
   for (const s of await spoken(page)) expect(s).toMatch(/fallen|risen|destroyed|galaxy|war is over/);
+});
+
+test("the music grows more intense as battles come thick and fast", async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem("parallax.view", "2d");
+    localStorage.setItem("parallax.music", "on");
+  });
+  await page.goto("/");
+  await page
+    .locator("label", { hasText: "Watch saved games" })
+    .locator("input")
+    .setInputFiles(new URL("./fixtures/fallen-risen.json", import.meta.url).pathname);
+  await expect(page.getByRole("button", { name: "Close replay" })).toBeVisible();
+  await page.locator("body").click({ position: { x: 5, y: 5 } }); // the click that starts music
+  // Calm, tense and battle mixes all play in step; at first only calm is heard.
+  const volumes = () =>
+    page.evaluate(() => (window as unknown as { media: HTMLMediaElement[] }).media.filter((m) => !m.paused).map((m) => m.volume));
+  await expect.poll(async () => (await volumes()).length).toBe(3);
+  const [calm, tense, battle] = await volumes();
+  expect(calm).toBeGreaterThan(0);
+  expect(tense + battle).toBe(0);
+  // A run of rounds full of battles brings the louder mixes in.
+  for (let i = 0; i < 70; i++) await page.keyboard.press("ArrowRight");
+  await expect.poll(async () => { const v = await volumes(); return v[1] + v[2]; }, { timeout: 15000 }).toBeGreaterThan(0.01);
 });

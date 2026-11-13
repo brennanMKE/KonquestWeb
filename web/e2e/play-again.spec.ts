@@ -11,7 +11,7 @@ test("after a game the host starts another with the same players", async ({ brow
   await guest.goto(host.url());
   await guest.getByLabel("Your name").fill("Ben");
   await guest.getByRole("button", { name: /^Join game/ }).click();
-  await expect(host.getByText("Ben")).toBeVisible();
+  await expect(host.locator(".seats").getByText("Ben")).toBeVisible();
   await host.getByRole("button", { name: "Add computer" }).click();
   await host.getByLabel("Map shape").selectOption("Flat");
   const set = async (label: string, value: string) => {

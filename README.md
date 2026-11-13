@@ -132,8 +132,10 @@ every fleet, every planet's stats and every battle, replayed in 3D each round.
 The **Audio** menu has a switch and a volume for each: sound effects, background music (off at first) and the
 announcer. The announcer speaks only the big moments, after their battles have played: a faction that has **fallen**
 (its last planet lost, fleets still in flight), one that has **risen** again (it took a planet back with those
-fleets), one destroyed, and the winner. It uses the browser's own speech. The music is generated in the browser, a slow
-ambient loop. The browser remembers the settings.
+fleets), one destroyed, and the winner. It uses the browser's own speech. The music is generated in the browser and follows
+the fighting: calm pads and bells when all is quiet, a pulsing bass as battles start, then drums and a driving
+arpeggio when battles come round after round (or enemy fleets are bearing down on you). Quiet rounds let it settle.
+The browser remembers the settings.
 
 ## Keys and gamepads
 

@@ -6,6 +6,7 @@ import { NEUTRAL, SPECTATOR } from "./proto";
 import { play, type Sound } from "./audio";
 import { factionOf, planetName } from "./names";
 import { say } from "./voice";
+import { noteRound, setIntensity } from "./music";
 import type { Faction } from "./names";
 
 export interface LogEntry {
@@ -331,6 +332,7 @@ class Store {
     this.winner = -1;
     this.lastEvents = null;
     this.activity = {};
+    setIntensity(0);
     clearTimeout(this.replayFallback);
     this.replayPending = false;
     this.pendingRound = 0;
@@ -401,6 +403,8 @@ class Store {
             this.addEvent(e);
             this.noteActivity(e.planet, m.round);
           }
+          const planets = m.view.planets;
+          noteRound(m.events, m.view.fleets, this.seat, (id) => planets[id]?.owner ?? -1);
         };
         if (this.playsBattles) this.afterReplay.push(logRound);
         else logRound();

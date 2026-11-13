@@ -10,6 +10,7 @@
   import SoundToggle from "./SoundToggle.svelte";
   import AudioPanel from "./AudioPanel.svelte";
   import { say } from "./voice";
+  import { noteRound, setIntensity } from "./music";
 
   let { onclose }: { onclose: () => void } = $props();
 
@@ -75,6 +76,8 @@
   // The announcer speaks a round's big moments when it's played forward:
   // after its battles, when they're shown.
   function announce(events: GameEvent[]) {
+    const v = frames[index]?.view;
+    if (v) noteRound(events, v.fleets, SPECTATOR, (id) => v.planets[id]?.owner ?? -1);
     for (const e of events) {
       const line = store.announcement(e, SPECTATOR);
       if (line) say(line);
@@ -87,6 +90,7 @@
   $effect(() => {
     if (replay !== current) {
       current = replay;
+      setIntensity(0);
       show(0);
     }
   });
